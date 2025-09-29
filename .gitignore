@@ -1,0 +1,92 @@
+# Auto-generated files
+.autotools
+.project
+.cproject
+.settings/*
+
+# Autotools cache and generated files
+aclocal.m4
+autom4te.cache/*
+
+# JWT secret key
+*/etc/*/jwt/*
+
+# Web assets directories (build after download)
+*/*/var/www/webroot/assets/*
+*/*/var/www/*/old/*
+
+# Node.js dependencies and build artifacts
+*/*/var/www/node_modules*
+*/*/var/www/package-lock.json
+
+# Build directories
+build/*
+borrame/*
+*/borrame/*
+*borrame
+
+# CMake cache
+CMakeCache.txt
+
+# Configuration files
+config.hin
+config.h
+.qmake.stash
+config.log
+config.status
+compile 
+libtool
+Makefile
+src/Makefile
+
+# Configure script and related files
+config.guess
+config.sub
+configure
+depcomp
+install-sh
+missing
+Makefile.in
+ltmain.sh
+*/*/.*
+*/.*
+.lib*
+
+# IDE and editor specific files
+*.user*
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Autosave Files
+*.autosave
+.vscode/settings.json
+
+# Documentation
+TODO.md

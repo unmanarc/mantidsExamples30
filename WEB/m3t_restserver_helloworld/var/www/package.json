@@ -1,0 +1,24 @@
+{
+  "name": "www",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build-assets": "npm run make-dirs && npm run copy-bootstrap && npm run copy-jquery && npm run copy-datatables && npm run copy-datatables-dt && npm run copy-fontawesome-woff2 && npm run copy-fontawesome-css && npm run copy-fontawesome-solid-css",
+    "make-dirs": "mkdir -pv webroot/assets/js webroot/assets/webfonts webroot/assets/css",
+    "copy-bootstrap": "cp -r node_modules/bootstrap/dist/* webroot/assets/",
+    "copy-jquery": "cp -r node_modules/jquery/dist/* webroot/assets/js/",
+    "copy-fontawesome-woff2": "cp node_modules/@fortawesome/fontawesome-free/webfonts/fa-solid-900.woff2 webroot/assets/webfonts/",
+    "copy-fontawesome-css": "cp node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css webroot/assets/css/",
+    "copy-fontawesome-solid-css": "cp node_modules/@fortawesome/fontawesome-free/css/solid.min.css webroot/assets/css/"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bootstrap": "^5.3.3",
+    "jquery": "^3.7.1",
+    "@fortawesome/fontawesome-free": "^7.0.0"
+  }
+}

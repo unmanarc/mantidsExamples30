@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en" class="h-100" data-bs-theme="auto">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="Aaron Mizrachi">
+    <title>Simple API Testing Site!</title>
+    <!-- Bootstrap core CSS -->
+    <link href="/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css">
+    <!-- Font Awesome by Dave Gandy - http://fontawesome.io - https://github.com/FortAwesome/Font-Awesome -->
+    <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+    <link rel="stylesheet" href="/assets/css/solid.min.css">
+</head>
+<body class="d-flex flex-column h-100">
+    <main class="flex-shrink-0">
+        <div class="container">
+            <header class="py-3">
+                <div class="row">
+                    <div class="col-12 text-center">
+                        <h1><i class="fas fa-flask"></i> Simple API Testing Site!</h1>
+                        <p class="lead">Test the API endpoints with a simple interface.</p>
+                    </div>
+                </div>
+            </header>
+            
+            <div class="row">
+                <div class="col-12">
+                    <div class="accordion" id="apiAccordion">
+                        
+                        <!-- Hello World Card -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingHelloWorld">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseHelloWorld" aria-expanded="true" aria-controls="collapseHelloWorld">
+                                    <strong>GET /api/v1/helloWorld</strong> - Returns a greeting message with the client's IP address, timestamp, and status.
+                                </button>
+                            </h2>
+                            <div id="collapseHelloWorld" class="accordion-collapse collapse show" aria-labelledby="headingHelloWorld" data-bs-parent="#apiAccordion">
+                                <div class="accordion-body">
+                                    <button id="testHelloWorld" class="btn btn-primary mb-3"><i class="fas fa-play"></i> Test Hello World</button>
+                                    <div id="helloWorldResult" class="alert alert-info" style="display: none;">
+                                        <h5>Response:</h5>
+                                        <pre id="helloWorldJson"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Status Card -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingStatus">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStatus" aria-expanded="false" aria-controls="collapseStatus">
+                                    <strong>GET /api/v1/status</strong> - Returns service status information including service name, version, uptime, and status.
+                                </button>
+                            </h2>
+                            <div id="collapseStatus" class="accordion-collapse collapse" aria-labelledby="headingStatus" data-bs-parent="#apiAccordion">
+                                <div class="accordion-body">
+                                    <button id="testStatus" class="btn btn-primary mb-3"><i class="fas fa-play"></i> Test Status</button>
+                                    <div id="statusResult" class="alert alert-info" style="display: none;">
+                                        <h5>Response:</h5>
+                                        <pre id="statusJson"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Echo Card -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingEcho">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEcho" aria-expanded="false" aria-controls="collapseEcho">
+                                    <strong>POST /api/v1/echo</strong> - Returns the input message back to the client in an echo field. Provide a JSON object with a "message" key in the request body or query.
+                                </button>
+                            </h2>
+                            <div id="collapseEcho" class="accordion-collapse collapse" aria-labelledby="headingEcho" data-bs-parent="#apiAccordion">
+                                <div class="accordion-body">
+                                    <div class="mb-3">
+                                        <label for="echoMessage" class="form-label">Message to Echo:</label>
+                                        <input type="text" class="form-control" id="echoMessage" placeholder="Enter your message here" value="Hello from the tester!">
+                                    </div>
+                                    <button id="testEcho" class="btn btn-primary mb-3"><i class="fas fa-play"></i> Test Echo</button>
+                                    <div id="echoResult" class="alert alert-info" style="display: none;">
+                                        <h5>Response:</h5>
+                                        <pre id="echoJson"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bootstrap core JavaScript -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="/assets/js/jquery.min.js"></script>
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Common error handler
+        function commonFunctionError(xhr, status, error) {
+            console.error("AJAX Error:", status, error);
+            alert("An error occurred while testing the API. Check the console for details.");
+        }
+
+        // Hello World Test
+        $('#testHelloWorld').on('click', function() {
+            $.ajax({
+                url: '/api/v1/helloWorld',
+                type: 'GET',
+                success: function(response) {
+                    $('#helloWorldJson').text(JSON.stringify(response, null, 2));
+                    $('#helloWorldResult').show();
+                },
+                error: commonFunctionError
+            });
+        });
+
+        // Status Test
+        $('#testStatus').on('click', function() {
+            $.ajax({
+                url: '/api/v1/status',
+                type: 'GET',
+                success: function(response) {
+                    $('#statusJson').text(JSON.stringify(response, null, 2));
+                    $('#statusResult').show();
+                },
+                error: commonFunctionError
+            });
+        });
+
+        // Echo Test
+        $('#testEcho').on('click', function() {
+            var message = $('#echoMessage').val();
+            $.ajax({
+                url: '/api/v1/echo',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ message: message }),
+                success: function(response) {
+                    $('#echoJson').text(JSON.stringify(response, null, 2));
+                    $('#echoResult').show();
+                },
+                error: commonFunctionError
+            });
+        });
+    </script>
+</body>
+</html>

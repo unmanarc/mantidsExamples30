@@ -1,0 +1,247 @@
+/**
+ * @file main.cpp
+ * @brief Minimal RESTful API Server Demo using libMantids3
+ *
+ * This example demonstrates how to create a simple HTTPS RESTful API server
+ * with JWT authentication support using the Mantids3 framework.
+ *
+ * Features:
+ * - TLS/SSL encrypted connections
+ * - RESTful API endpoint registration
+ * - Configuration file support
+ * - Structured logging (application & RPC)
+ * - JWT token validation ready
+ *
+ */
+
+#include <Mantids30/Config_Builder/program_configloader.h>
+#include <Mantids30/Config_Builder/program_logs.h>
+#include <Mantids30/Config_Builder/restful_engine.h>
+#include <Mantids30/Net_Sockets/socket_tls.h>
+#include <Mantids30/Program_Service/application.h>
+#include <Mantids30/Server_RESTfulWebAPI/engine.h>
+
+#include "config.h"
+
+#include <boost/algorithm/string/case_conv.hpp>
+#include <optional>
+
+using namespace Mantids30;
+using namespace Mantids30::Program;
+using namespace Mantids30::Network::Servers;
+
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
+struct AppContext
+{
+    boost::property_tree::ptree config;
+    std::string configDir;
+    time_t startTime;
+    std::unique_ptr<Logs::AppLog> appLog;
+    std::unique_ptr<Logs::RPCLog> rpcLog;
+} g_ctx;
+
+// ============================================================================
+// API ENDPOINTS
+// ============================================================================
+
+/**
+ * @brief Example API endpoint: GET /api/v1/helloWorld
+ * Returns a greeting message with the client's IP address
+ */
+API::APIReturn apiHelloWorld(void *,const API::RESTful::RequestParameters &, Sessions::ClientDetails &client)
+{
+    Json::Value jsonResponse;
+
+    jsonResponse["message"] = "Hello World";
+    jsonResponse["client_ip"] = client.ipAddress;
+    jsonResponse["timestamp"] = static_cast<Json::Int64>(std::time(nullptr));
+    jsonResponse["status"] = "success";
+
+    return jsonResponse;
+}
+
+/**
+ * @brief Example API endpoint: GET /api/v1/status
+ * Returns service status information
+ */
+API::APIReturn apiStatus(void *,const API::RESTful::RequestParameters &, Sessions::ClientDetails &)
+{
+    Json::Value jsonResponse;
+
+    jsonResponse["service"] = PROJECT_NAME;
+    jsonResponse["version"] = std::string(PROJECT_VER_MAJOR) + "." + PROJECT_VER_MINOR + "." + PROJECT_VER_PATCH;
+    jsonResponse["uptime_seconds"] = static_cast<Json::Int64>( std::time(nullptr) - g_ctx.startTime );
+    jsonResponse["status"] = "running";
+
+    return jsonResponse;
+}
+
+/**
+ * @brief Example API endpoint: GET /api/v1/echo
+ * Returns the input message back to the client
+ */
+API::APIReturn apiEcho(void *,const API::RESTful::RequestParameters &params, Sessions::ClientDetails &)
+{
+    Json::Value jsonResponse;
+
+    jsonResponse["echo"] = JSON_ASSTRING(*params.inputJSON,"message","");
+    jsonResponse["status"] = "success";
+
+    return jsonResponse;
+}
+
+/**
+ * @brief Register all API endpoints
+ */
+auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::MethodsHandler>
+{
+    auto methods = std::make_shared<API::RESTful::MethodsHandler>();
+
+    using M = API::RESTful::MethodsHandler;
+    using Sec = M::SecurityOptions;
+
+    // Public endpoints (no authentication required)
+    methods->addResource(M::GET, "helloWorld", &apiHelloWorld, nullptr, Sec::NO_AUTH, {});
+    methods->addResource(M::GET, "status", &apiStatus, nullptr, Sec::NO_AUTH, {});
+    methods->addResource(M::POST, "echo", &apiEcho, nullptr, Sec::NO_AUTH, {});
+
+    // Add more endpoints here:
+    // methods->addResource(M::POST, "users", &apiCreateUser, nullptr, Sec::FULL_AUTH, {"admin"});
+
+    return methods;
+}
+
+// ============================================================================
+// SERVICE INITIALIZATION
+// ============================================================================
+
+/**
+ * @brief Initialize and start the RESTful web service
+ */
+bool startWebService()
+{
+    // Load web service configuration
+    auto webConfig = g_ctx.config.get_child_optional("WebService");
+    if (!webConfig.has_value())
+    {
+        g_ctx.appLog->log0(__func__, Logs::LEVEL_ERR, "Missing 'WebService' section in configuration");
+        return false;
+    }
+
+    // Create RESTful engine with secure defaults
+    auto *engine = Config::RESTful_Engine::createRESTfulEngine(&(*webConfig),
+                                                               g_ctx.appLog.get(),
+                                                               g_ctx.rpcLog.get(),
+                                                               boost::to_upper_copy(std::string(PROJECT_NAME)),
+                                                               "/var/www/" PROJECT_NAME,  // Default web root
+                                                               Config::REST_ENGINE_MANDATORY_SSL | Config::REST_ENGINE_NOCONFIG_JWT,
+                                                               {} // No custom variables
+                                                               );
+
+    if (!engine)
+    {
+        g_ctx.appLog->log0(__func__, Logs::LEVEL_ERR, "Failed to create web service");
+        return false;
+    }
+
+    // Configure service
+    engine->config.appName = boost::to_upper_copy(std::string(PROJECT_NAME));
+    engine->config.setSoftwareVersion(atoi(PROJECT_VER_MAJOR), atoi(PROJECT_VER_MINOR), atoi(PROJECT_VER_PATCH), "stable");
+
+    // Register API v1 endpoints
+    engine->methodsHandler[1] = registerAPIEndpoints();
+
+    // Start service
+    engine->startInBackground();
+
+    g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Web service listening on %s", engine->getListenerSocket()->getLastBindAddress().c_str());
+    return true;
+}
+
+// ============================================================================
+// APPLICATION LIFECYCLE
+// ============================================================================
+
+class DemoApplication : public Application
+{
+public:
+    /**
+     * @brief Initialize command-line arguments and metadata
+     */
+    void _initvars(int, char *[], Arguments::GlobalArguments *args) override
+    {
+        args->setInifiniteWaitAtEnd(true);
+        args->softwareLicense = PROJECT_LICENSE;
+        args->softwareDescription = PROJECT_DESCRIPTION;
+        args->addAuthor({PROJECT_AUTHOR_NAME, PROJECT_AUTHOR_MAIL});
+        args->setVersion(atoi(PROJECT_VER_MAJOR), atoi(PROJECT_VER_MINOR), atoi(PROJECT_VER_PATCH), "stable");
+
+        // Command-line options
+        args->addCommandLineOption("Service", 'c', "config-dir", "Configuration directory path", "/etc/" PROJECT_NAME, Memory::Abstract::Var::TYPE_STRING);
+    }
+
+    /**
+     * @brief Load and validate configuration
+     */
+    bool _config(int, char *[], Arguments::GlobalArguments *args) override
+    {
+        // Initialize TLS
+        Network::Sockets::Socket_TLS::prepareTLS();
+
+        // Load configuration
+        g_ctx.configDir = args->getCommandLineOptionValue("config-dir")->toString();
+
+        auto initLog = Config::Logs::createInitLog();
+        auto configOpt = Config::Loader::loadSecureApplicationConfig(initLog.get(), g_ctx.configDir.c_str(), "webserver.conf");
+
+        if (!configOpt.has_value())
+        {
+            std::cerr << "ERROR: Failed to load configuration from " << g_ctx.configDir << "/webserver.conf\n";
+            return false;
+        }
+
+        g_ctx.config = *configOpt;
+
+        // Initialize logging
+        g_ctx.appLog.reset(Config::Logs::createAppLog(&g_ctx.config));
+        g_ctx.rpcLog.reset(Config::Logs::createRPCLog(&g_ctx.config));
+
+        return true;
+    }
+
+    /**
+     * @brief Start the application services
+     */
+    int _start(int, char *[], Arguments::GlobalArguments *args) override
+    {
+        g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "%s v%s.%s.%s starting (PID: %d)", PROJECT_NAME, PROJECT_VER_MAJOR, PROJECT_VER_MINOR, PROJECT_VER_PATCH, getpid());
+        g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
+
+        g_ctx.startTime = time(nullptr);
+
+        if (!startWebService())
+        {
+            g_ctx.appLog->log0(__func__, Logs::LEVEL_ERR, "Service initialization failed");
+            return EXIT_FAILURE;
+        }
+
+        g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Service ready");
+        return EXIT_SUCCESS;
+    }
+
+    /**
+     * @brief Clean shutdown handler
+     */
+    void _shutdown() override { g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Shutting down..."); }
+};
+
+// ============================================================================
+// ENTRY POINT
+// ============================================================================
+
+int main(int argc, char *argv[])
+{
+    return StartApplication(argc, argv, new DemoApplication);
+}
