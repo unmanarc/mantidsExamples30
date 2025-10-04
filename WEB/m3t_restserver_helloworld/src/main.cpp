@@ -33,13 +33,16 @@ using namespace Mantids30::Network::Servers;
 // ============================================================================
 // GLOBAL STATE
 // ============================================================================
+#define APP_LOG g_ctx.appLog
+#define RPC_LOG g_ctx.rpcLog
+
 struct AppContext
 {
     boost::property_tree::ptree config;
     std::string configDir;
     time_t startTime;
-    std::unique_ptr<Logs::AppLog> appLog;
-    std::unique_ptr<Logs::RPCLog> rpcLog;
+    std::shared_ptr<Logs::AppLog> appLog;
+    std::shared_ptr<Logs::RPCLog> rpcLog;
 } g_ctx;
 
 // ============================================================================
@@ -126,14 +129,14 @@ bool startWebService()
     auto webConfig = g_ctx.config.get_child_optional("WebService");
     if (!webConfig.has_value())
     {
-        g_ctx.appLog->log0(__func__, Logs::LEVEL_ERR, "Missing 'WebService' section in configuration");
+        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Missing 'WebService' section in configuration");
         return false;
     }
 
     // Create RESTful engine with secure defaults
-    auto *engine = Config::RESTful_Engine::createRESTfulEngine(&(*webConfig),
-                                                               g_ctx.appLog.get(),
-                                                               g_ctx.rpcLog.get(),
+    auto *engine = Config::RESTful_Engine::createRESTfulEngine(*webConfig,
+                                                               APP_LOG,
+                                                               RPC_LOG,
                                                                boost::to_upper_copy(std::string(PROJECT_NAME)),
                                                                "/var/www/" PROJECT_NAME,  // Default web root
                                                                Config::REST_ENGINE_MANDATORY_SSL | Config::REST_ENGINE_NOCONFIG_JWT,
@@ -142,7 +145,7 @@ bool startWebService()
 
     if (!engine)
     {
-        g_ctx.appLog->log0(__func__, Logs::LEVEL_ERR, "Failed to create web service");
+        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Failed to create web service");
         return false;
     }
 
@@ -156,7 +159,7 @@ bool startWebService()
     // Start service
     engine->startInBackground();
 
-    g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Web service listening on %s", engine->getListenerSocket()->getLastBindAddress().c_str());
+    APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Web service listening on %s", engine->getListenerSocket()->getLastBindAddress().c_str());
     return true;
 }
 
@@ -198,15 +201,15 @@ public:
 
         if (!configOpt.has_value())
         {
-            std::cerr << "ERROR: Failed to load configuration from " << g_ctx.configDir << "/webserver.conf\n";
+            initLog->log0(__func__, Logs::LEVEL_ERR, "ERROR: Failed to load configuration from %s/webserver.conf", g_ctx.configDir.c_str());
             return false;
         }
 
         g_ctx.config = *configOpt;
 
-        // Initialize logging
-        g_ctx.appLog.reset(Config::Logs::createAppLog(&g_ctx.config));
-        g_ctx.rpcLog.reset(Config::Logs::createRPCLog(&g_ctx.config));
+        // Initialize logging as defined in the configuration
+        APP_LOG = Config::Logs::createAppLog(g_ctx.config);
+        RPC_LOG = Config::Logs::createRPCLog(g_ctx.config);
 
         return true;
     }
@@ -216,25 +219,25 @@ public:
      */
     int _start(int, char *[], Arguments::GlobalArguments *args) override
     {
-        g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "%s v%s.%s.%s starting (PID: %d)", PROJECT_NAME, PROJECT_VER_MAJOR, PROJECT_VER_MINOR, PROJECT_VER_PATCH, getpid());
-        g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
+        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "%s v%s.%s.%s starting (PID: %d)", PROJECT_NAME, PROJECT_VER_MAJOR, PROJECT_VER_MINOR, PROJECT_VER_PATCH, getpid());
+        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
 
         g_ctx.startTime = time(nullptr);
 
         if (!startWebService())
         {
-            g_ctx.appLog->log0(__func__, Logs::LEVEL_ERR, "Service initialization failed");
+            APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Service initialization failed");
             return EXIT_FAILURE;
         }
 
-        g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Service ready");
+        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Service ready");
         return EXIT_SUCCESS;
     }
 
     /**
      * @brief Clean shutdown handler
      */
-    void _shutdown() override { g_ctx.appLog->log0(__func__, Logs::LEVEL_INFO, "Shutting down..."); }
+    void _shutdown() override { APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Shutting down..."); }
 };
 
 // ============================================================================
