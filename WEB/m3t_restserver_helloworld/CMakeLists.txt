@@ -66,6 +66,7 @@ target_link_libraries(${APP_NAME} ${OPENSSL_STATIC_LDFLAGS})
 ################################################################################
 # List of Mantids30 libraries to link against
 set(Mantids30_LIBRARIES
+    Mantids30_Protocol_APISync
     Mantids30_Server_WebCore
     Mantids30_Server_RESTfulWebAPI
     Mantids30_API_RESTful

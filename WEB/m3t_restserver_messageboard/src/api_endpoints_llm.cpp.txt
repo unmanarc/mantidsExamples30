@@ -1,0 +1,140 @@
+#include "api_endpoints.h"
+#include "Mantids30/Memory/a_uint32.h"
+#include "Mantids30/Protocol_HTTP/api_return.h"
+
+#include "app_context.h"
+#include "json/value.h"
+
+#include <Mantids30/Memory/a_allvars.h>
+
+using namespace Mantids30;
+using namespace Mantids30::Program;
+using namespace Mantids30::Memory;
+using namespace Mantids30::Network::Servers;
+using namespace Mantids30::Network::Protocols;
+
+/*
+LLM CONTEXT FOR LIBMANTIDS3:
+struct ClientDetails {
+std::string ipAddress, extraData,tlsCommonName,userAgent;
+};
+struct RequestParameters
+{
+Json::Value emptyJSON;
+Json::Value *inputJSON = &emptyJSON; ///< Holds the input JSON that came from the request body.
+DataFormat::JWT::Token emptyToken; ///< Holds a default empty token
+DataFormat::JWT::Token *jwtToken = &emptyToken; ///< Holds JWT token data, if present and validated the pointer will be changed.
+};
+enum eLogLevels {LEVEL_INFO,LEVEL_WARN,LEVEL_CRITICAL,LEVEL_ERR,LEVEL_DEBUG,LEVEL_DEBUG1,LEVEL_SECURITY_ALERT};
+class Token {
+public:
+std::string getIssuer() const;
+std::string getImpersonator() const;
+std::string getSubject() const;
+std::string getDomain() const;
+std::string getAudience() const;
+std::string getJwtId() const;
+std::map<std::string,Json::Value> getAllClaims();
+Json::Value getAllClaimsAsJSON();
+bool isAdmin() const;
+Json::Value getClaim(const std::string &name) const;
+bool hasClaim(const std::string &name) const;
+Json::Value *getClaimsPTR();
+};
+class AppLog : public LogBase
+{
+public:
+void log(const std::string & module, const std::string & user, const std::string & ip, eLogLevels logSeverity, const uint32_t &outSize, const char* fmtLog,  ...);
+void log2(const std::string & module, const std::string & user, const std::string & ip, eLogLevels logSeverity, const char* fmtLog,  ...);
+void log1(const std::string & module, const std::string & ip, eLogLevels logSeverity, const char* fmtLog,  ...);
+void log0(const std::string & module, eLogLevels logSeverity, const char* fmtLog,  ...);
+};
+
+bool addEndpoint(const MethodMode &mode, const std::string &resourceName, MethodType method, void *context, const uint32_t &SecurityOptions, const std::set<std::string> requiredScopes);
+*/
+
+// ============================================================================
+// API ENDPOINTS
+// ============================================================================
+
+API::APIReturn apiEcho(void *,const API::RESTful::RequestParameters &params, Sessions::ClientDetails &)
+{
+    Json::Value jsonResponse;
+
+    jsonResponse["echo"] = JSON_ASSTRING(*params.inputJSON,"message","");
+    jsonResponse["status"] = "success";
+
+    return jsonResponse;
+}
+
+API::APIReturn exampleFunctionRD(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+{
+    Threads::Sync::Lock_RD lock(g_ctx.dbShrLock);
+
+    std::string appName = JSON_ASSTRING(*params.inputJSON, "appName", "");
+    Abstract::STRING roleId, description;
+    std::string user = params.jwtToken->getSubject();
+
+    if (appName.empty())
+    {
+        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Application name is required");
+    }
+
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is consulting myTable for app %s", appName.c_str());
+
+
+    SQLConnector::QueryInstance i = g_ctx.dbConnector->qSelect("SELECT `roleId`,`roleDescription` FROM myTable WHERE `f_appName`=:appName;", {{":appName", MAKE_VAR(STRING, appName)}},
+                                                               {&roleId, &description});
+
+    Json::Value jsonResponse = Json::arrayValue;
+    while (i.getResultsOK() && i.query->step())
+    {
+        Json::Value x;
+        x["description"] = description.getValue();
+        x["id"] = roleId.getValue();
+        jsonResponse.append(x);
+    }
+    return jsonResponse;
+}
+
+API::APIReturn exampleFunctionRW(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+{
+    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+
+    std::string appName = JSON_ASSTRING(*params.inputJSON, "appName", "");
+    uint32_t activityId = JSON_ASUINT(*params.inputJSON, "activityId", 0);
+    std::string activityDescription = JSON_ASSTRING(*params.inputJSON, "activityDescription", "");
+    Json::Value jsonResponse = Json::arrayValue;
+    Abstract::STRING roleId, description;
+
+    if (appName.empty())
+    {
+        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Application name is required");
+    }
+
+    if (!g_ctx.dbConnector->execute("INSERT INTO iam.applicationActivities (f_appName, activityId, parentActivity, description) VALUES (:appName, :activityId, NULL, :description);",
+                                    {{":appName", MAKE_VAR(STRING, appName)}, {":activityId", MAKE_VAR(UINT32, activityId)}, {":description", MAKE_VAR(STRING, activityDescription)}}))
+    {
+        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
+    }
+
+    return API::APIReturn();
+}
+// ============================================================================
+// API ENDPOINTS REGISTRATION:
+// ============================================================================
+
+auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
+{
+    auto endpoints = std::make_shared<API::RESTful::Endpoints>();
+
+    using M = API::RESTful::Endpoints;
+    using Sec = M::SecurityOptions;
+
+    // Public endpoints (no authentication required)
+    endpoints->addEndpoint(M::POST, "echo", &apiEcho, nullptr, Sec::NO_AUTH, {});
+    endpoints->addEndpoint(M::GET, "exampleFunctionRD", &exampleFunctionRD, nullptr, Sec::REQUIRE_JWT_COOKIE_AUTH, {"APP_READ"});
+    endpoints->addEndpoint(M::POST, "exampleFunctionRW", &exampleFunctionRW, nullptr, Sec::REQUIRE_JWT_COOKIE_AUTH, {"APP_WRITE"});
+
+    return endpoints;
+}

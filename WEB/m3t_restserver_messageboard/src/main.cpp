@@ -15,15 +15,14 @@
  */
 
 #include <Mantids30/Config_Builder/program_configloader.h>
-#include <Mantids30/Config_Builder/program_logs.h>
+
 #include <Mantids30/Config_Builder/restful_engine.h>
 #include <Mantids30/Net_Sockets/socket_tls.h>
 #include <Mantids30/Program_Service/application.h>
-#include <Mantids30/Server_RESTfulWebAPI/engine.h>
-
-#include "config.h"
-
+#include <Mantids30/Protocol_APISync/apisync.h>
 #include <boost/algorithm/string/case_conv.hpp>
+#include "dbinit.h"
+#include "definitions/accesscontrol.h"
 #include <optional>
 
 using namespace Mantids30;
@@ -33,69 +32,12 @@ using namespace Mantids30::Network::Servers;
 // ============================================================================
 // GLOBAL STATE
 // ============================================================================
-#define APP_LOG g_ctx.appLog
-#define RPC_LOG g_ctx.rpcLog
 
-struct AppContext
-{
-    boost::property_tree::ptree config;
-    std::string configDir;
-    time_t startTime;
-    std::shared_ptr<Logs::AppLog> appLog;
-    std::shared_ptr<Logs::RPCLog> rpcLog;
-} g_ctx;
+#include "definitions/context.h"
+#include "endpoints/api.h"
+#include "config.h"
 
-/**
- * @brief Register all API endpoints using lambda functions.
- */
-auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
-{
-    auto endpoints = std::make_shared<API::RESTful::Endpoints>();
-    using M = API::RESTful::Endpoints;
-    using Sec = M::SecurityOptions;
-
-    // Public endpoint: GET /api/v1/helloWorld
-    // Returns a greeting message with the client's IP address.
-    endpoints->addEndpoint(M::GET, "helloWorld", Sec::NO_AUTH, {}, nullptr,
-                           [](void *, const API::RESTful::RequestParameters &, Sessions::ClientDetails &client) -> API::APIReturn
-                           {
-                               Json::Value jsonResponse;
-                               jsonResponse["message"] = "Hello World";
-                               jsonResponse["client_ip"] = client.ipAddress;
-                               jsonResponse["timestamp"] = static_cast<Json::Int64>(std::time(nullptr));
-                               jsonResponse["status"] = "success";
-                               return jsonResponse;
-                           });
-
-    // Public endpoint: GET /api/v1/status
-    // Returns service status information.
-    endpoints->addEndpoint(M::GET, "status", Sec::NO_AUTH, {}, nullptr,
-                           [](void *, const API::RESTful::RequestParameters &, Sessions::ClientDetails &) -> API::APIReturn
-                           {
-                               Json::Value jsonResponse;
-                               jsonResponse["service"] = PROJECT_NAME;
-                               jsonResponse["version"] = std::string(PROJECT_VER_MAJOR) + "." + PROJECT_VER_MINOR + "." + PROJECT_VER_PATCH;
-                               jsonResponse["uptime_seconds"] = static_cast<Json::Int64>(std::time(nullptr) - g_ctx.startTime);
-                               jsonResponse["status"] = "running";
-                               return jsonResponse;
-                           });
-
-    // Public endpoint: POST /api/v1/echo
-    // Returns the input message back to the client.
-    endpoints->addEndpoint(M::POST, "echo", Sec::NO_AUTH, {}, nullptr,
-                           [](void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &) -> API::APIReturn
-                           {
-                               Json::Value jsonResponse;
-                               jsonResponse["echo"] = JSON_ASSTRING(*params.inputJSON, "message", "");
-                               jsonResponse["status"] = "success";
-                               return jsonResponse;
-                           });
-
-    // Add more endpoints here:
-    // endpoints->addEndpoint(M::POST, "users", &apiCreateUser, nullptr, Sec::FULL_AUTH, {"admin"});
-
-    return endpoints;
-}
+AppContext g_ctx;
 
 // ============================================================================
 // SERVICE INITIALIZATION
@@ -114,11 +56,41 @@ bool startWebService()
         return false;
     }
 
+    std::map<std::string, std::string> vars;
+
+    const char* apiKey = getenv("x-api-key");
+    if (apiKey == nullptr) {
+        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Environment variable 'x-api-key' not defined");
+        return false;
+    }
+
+    vars["APIKEY"] = std::string(apiKey);
+
+    const char* appName = getenv("app");
+    if (appName == nullptr) {
+        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Environment variable 'app' not defined");
+        return false;
+    }
+
+    vars["APP"] = std::string(appName);
+
     // Create RESTful engine with secure defaults
-    auto *engine = Config::RESTful_Engine::createRESTfulEngine(*webConfig, APP_LOG, RPC_LOG, boost::to_upper_copy(std::string(PROJECT_NAME)),
-                                                               "/var/www/" PROJECT_NAME,                                                // Default web root
-                                                               Config::REST_ENGINE_MANDATORY_SSL | Config::REST_ENGINE_NOCONFIG_JWT, {} // No custom variables
-    );
+    auto *engine = Config::RESTful_Engine::createRESTfulEngine(*webConfig,
+                                                               APP_LOG,
+                                                               RPC_LOG,
+                                                               boost::to_upper_copy(std::string(PROJECT_NAME)),
+                                                               "/var/www/" PROJECT_NAME,  // Default web root
+                                                               Config::REST_ENGINE_MANDATORY_SSL,
+                                                               vars
+                                                               );
+
+    if (auto x = webConfig->get_child_optional("APISync"))
+    {
+        Network::Protocols::APISync::APISyncParameters parameters;
+        parameters.loadFromInfoTree(*x);
+        Network::Protocols::APISync::updateAccessControlContext( APP_LOG.get(), &parameters, appName,apiKey, appScopes(), appRoles(), appActivities()  );
+    }
+
 
     if (!engine)
     {
@@ -127,7 +99,7 @@ bool startWebService()
     }
 
     // Configure service
-    engine->config.appName = boost::to_upper_copy(std::string(PROJECT_NAME));
+    engine->config.appName = vars["APP"];
     engine->config.setSoftwareVersion(atoi(PROJECT_VER_MAJOR), atoi(PROJECT_VER_MINOR), atoi(PROJECT_VER_PATCH), "stable");
 
     // Register API v1 endpoints
@@ -200,6 +172,11 @@ public:
         APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
 
         g_ctx.startTime = time(nullptr);
+
+        if (!initDatabase())
+        {
+            return EXIT_FAILURE;
+        }
 
         if (!startWebService())
         {

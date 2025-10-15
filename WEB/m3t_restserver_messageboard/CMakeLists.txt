@@ -6,7 +6,7 @@ get_filename_component(PARENT_DIRFULL ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 get_filename_component(PARENT_DIR ${PARENT_DIRFULL} NAME)
 
 project(${APP_NAME})
-project(${PROJECT_NAME} VERSION ${SVERSION} DESCRIPTION "REST Web Application Server Testing IAM Integration")
+project(${PROJECT_NAME} VERSION ${SVERSION} DESCRIPTION "REST Web Application Server Dicussion Forum")
 
 configure_file(src/config.h.in ${${APP_NAME}_SOURCE_DIR}/src/config.h)
 
@@ -75,6 +75,8 @@ set(Mantids30_LIBRARIES
     Mantids30_Protocol_MIME
     Mantids30_Net_Sockets
     Mantids30_Threads
+    Mantids30_DB
+    Mantids30_DB_SQLite3
     Mantids30_Memory
     Mantids30_Program_Service
     Mantids30_Program_Logs

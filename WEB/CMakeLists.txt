@@ -1,3 +1,3 @@
 ADD_SUBDIRECTORY(m3t_restserver_helloworld)
 ADD_SUBDIRECTORY(m3t_restserver_loggedin)
-
+ADD_SUBDIRECTORY(m3t_restserver_messageboard)

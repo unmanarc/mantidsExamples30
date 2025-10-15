@@ -114,23 +114,23 @@ API::APIReturn getAuthenticatedInfo(void *,const API::RESTful::RequestParameters
 /**
  * @brief Register all API endpoints
  */
-auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::MethodsHandler>
+auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
 {
-    auto methods = std::make_shared<API::RESTful::MethodsHandler>();
+    auto endpoints = std::make_shared<API::RESTful::Endpoints>();
 
-    using M = API::RESTful::MethodsHandler;
+    using M = API::RESTful::Endpoints;
     using Sec = M::SecurityOptions;
 
     // Public endpoints (no authentication required)
-    methods->addResource(M::GET, "helloWorld", &apiHelloWorld, nullptr, Sec::NO_AUTH, {});
-    methods->addResource(M::GET, "status", &apiStatus, nullptr, Sec::NO_AUTH, {});
-    methods->addResource(M::POST, "echo", &apiEcho, nullptr, Sec::NO_AUTH, {});
-    methods->addResource(M::GET, "getAuthenticatedInfo", &getAuthenticatedInfo, nullptr, Sec::REQUIRE_JWT_COOKIE_AUTH, {});
+    endpoints->addEndpoint(M::GET,    "helloWorld",          Sec::NO_AUTH,                 {},         nullptr, &apiHelloWorld);
+    endpoints->addEndpoint(M::GET,    "status",              Sec::NO_AUTH,                 {},         nullptr, &apiStatus);
+    endpoints->addEndpoint(M::POST,   "echo",                Sec::NO_AUTH,                 {},         nullptr, &apiEcho);
+    endpoints->addEndpoint(M::GET,    "getAuthenticatedInfo",Sec::REQUIRE_JWT_COOKIE_AUTH, {"READER"}, nullptr, &getAuthenticatedInfo);
 
     // Add more endpoints here:
-    // methods->addResource(M::POST, "users", &apiCreateUser, nullptr, Sec::FULL_AUTH, {"admin"});
+    // endpoints->addEndpoint(M::POST, "users", &apiCreateUser, nullptr, Sec::FULL_AUTH, {"admin"});
 
-    return methods;
+    return endpoints;
 }
 
 // ============================================================================
@@ -189,7 +189,7 @@ bool startWebService()
     engine->config.setSoftwareVersion(atoi(PROJECT_VER_MAJOR), atoi(PROJECT_VER_MINOR), atoi(PROJECT_VER_PATCH), "stable");
 
     // Register API v1 endpoints
-    engine->methodsHandler[1] = registerAPIEndpoints();
+    engine->endpointsHandler[1] = registerAPIEndpoints();
 
     // Start service
     engine->startInBackground();
