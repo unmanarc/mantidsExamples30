@@ -19,7 +19,7 @@ using namespace Mantids30::Network::Protocols;
 
 API::APIReturn getThreads(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    Threads::Sync::Lock_RD lock(g_ctx.dbShrLock);
 
     std::string user = params.jwtToken->getSubject();
 
@@ -73,7 +73,7 @@ API::APIReturn createThread(void *, const API::RESTful::RequestParameters &param
 
 API::APIReturn getMessages(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    Threads::Sync::Lock_RD lock(g_ctx.dbShrLock);
 
     uint32_t threadId = JSON_ASUINT(*params.inputJSON, "threadId", 0);
     std::string user = params.jwtToken->getSubject();
