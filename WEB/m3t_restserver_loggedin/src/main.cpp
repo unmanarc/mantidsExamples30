@@ -262,7 +262,7 @@ public:
         if (!startWebService())
         {
             APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Service initialization failed");
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
         }
 
         APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Service ready");
