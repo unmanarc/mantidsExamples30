@@ -4,7 +4,7 @@
 #include <Mantids30/DB_SQLite3/sqlconnector_sqlite3.h>
 #include <boost/property_tree/ptree_fwd.hpp>
 #include <Mantids30/Threads/lock_shared.h>
-#include <Mantids30/Config_Builder/program_logs.h>
+#include <Mantids30/Program_Logs/config_builder.h>
 #include <memory>
 #include <string>
 #include <ctime>

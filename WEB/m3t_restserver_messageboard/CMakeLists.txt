@@ -79,7 +79,6 @@ set(Mantids30_LIBRARIES
     Mantids30_Memory
     Mantids30_Program_Service
     Mantids30_Program_Logs
-    Mantids30_Config_Builder
     Mantids30_Helpers
     Mantids30_DataFormat_JWT
 )

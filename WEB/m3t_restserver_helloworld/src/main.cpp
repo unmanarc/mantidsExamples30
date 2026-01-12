@@ -14,9 +14,9 @@
  *
  */
 
-#include <Mantids30/Config_Builder/program_configloader.h>
-#include <Mantids30/Config_Builder/program_logs.h>
-#include <Mantids30/Config_Builder/restful_engine.h>
+#include <Mantids30/Program_Service/program_config.h>
+#include <Mantids30/Program_Logs/config_builder.h>
+#include <Mantids30/Server_RESTfulWebAPI/config_builder.h>
 #include <Mantids30/Net_Sockets/socket_tls.h>
 #include <Mantids30/Program_Service/application.h>
 #include <Mantids30/Server_RESTfulWebAPI/engine.h>
