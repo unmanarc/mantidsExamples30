@@ -14,9 +14,13 @@ bool initTables()
     bool success = true;
     for (const auto &sql : getSQLCreateStatements())
     {
-        if (!g_ctx.dbConnector->execute(sql.data()))
+        auto i = g_ctx.dbConnector->qExecute(sql.data());
+        if (!i || !i->isSuccessful())
         {
-            APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Failed to execute SQL: '%s'", std::string(sql).c_str());
+            if (i)
+                APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Failed to execute SQL (%s): '%s'", i->getErrorString().c_str(), std::string(sql).c_str());
+            else
+                APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Failed to execute SQL (%s): Database was closed");
             success = false;
             break;
         }
