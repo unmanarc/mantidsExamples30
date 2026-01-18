@@ -29,12 +29,12 @@ API::APIReturn getThreads(void *, const API::RESTful::RequestParameters &params,
     Abstract::STRING title, creatorUserId, createdAt, lastPostAt;
     Abstract::BOOL isPinned, isLocked;
 
-    SQLConnector::QueryInstance i = g_ctx.dbConnector->qSelect("SELECT `threadId`, `title`, `creatorUserId`, `createdAt`, `lastPostAt`, `isPinned`, `isLocked` "
+    auto i = g_ctx.dbConnector->qSelect("SELECT `threadId`, `title`, `creatorUserId`, `createdAt`, `lastPostAt`, `isPinned`, `isLocked` "
                                                                "FROM `mboard`.`threads` WHERE `isLocked`=0 OR `isLocked`=1 ORDER BY `isPinned` DESC, `lastPostAt` DESC;",
                                                                {}, {&threadId, &title, &creatorUserId, &createdAt, &lastPostAt, &isPinned, &isLocked});
 
     Json::Value jsonResponse = Json::arrayValue;
-    while (i.getResultsOK() && i.query->step())
+    while (i && i->isSuccessful() && i->step())
     {
         Json::Value x;
         x["threadId"] = threadId.getValue();
@@ -63,7 +63,7 @@ API::APIReturn createThread(void *, const API::RESTful::RequestParameters &param
 
     APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is creating thread: %s", title.c_str());
 
-    if (!g_ctx.dbConnector->execute("INSERT INTO `mboard`.`threads` (title, creatorUserId) VALUES (:title, :userId);", {{":title", MAKE_VAR(STRING, title)}, {":userId", MAKE_VAR(STRING, user)}}))
+    if (!g_ctx.dbConnector->qExecuteEx("INSERT INTO `mboard`.`threads` (title, creatorUserId) VALUES (:title, :userId);", {{":title", MAKE_VAR(STRING, title)}, {":userId", MAKE_VAR(STRING, user)}}))
     {
         return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
@@ -89,12 +89,12 @@ API::APIReturn getMessages(void *, const API::RESTful::RequestParameters &params
     Abstract::STRING userId, content, ipAddress, userAgent, createdAt, editedAt;
     Abstract::BOOL isDeleted;
 
-    SQLConnector::QueryInstance i = g_ctx.dbConnector->qSelect("SELECT `messageId`, `userId`, `content`, `ipAddress`, `userAgent`, `createdAt`, `editedAt`, `isDeleted` "
+    auto i = g_ctx.dbConnector->qSelect("SELECT `messageId`, `userId`, `content`, `ipAddress`, `userAgent`, `createdAt`, `editedAt`, `isDeleted` "
                                                                "FROM `mboard`.`messages` WHERE `threadId`=:threadId AND `isDeleted`=0 ORDER BY `createdAt` ASC;",
                                                                {{":threadId", MAKE_VAR(UINT32, threadId)}}, {&messageId, &userId, &content, &ipAddress, &userAgent, &createdAt, &editedAt, &isDeleted});
 
     Json::Value jsonResponse = Json::arrayValue;
-    while (i.getResultsOK() && i.query->step())
+    while (i && i->isSuccessful() && i->step())
     {
         Json::Value x;
         x["messageId"] = messageId.getValue();
@@ -132,10 +132,8 @@ API::APIReturn postMessage(void *, const API::RESTful::RequestParameters &params
     // Check if thread exists and is not locked
     Abstract::BOOL isLocked;
     {
-        SQLConnector::QueryInstance check = g_ctx.dbConnector->qSelect("SELECT `isLocked` FROM `mboard`.`threads` WHERE `threadId`=:threadId;", {{":threadId", MAKE_VAR(UINT32, threadId)}},
-                                                                       {&isLocked});
-
-        if (!check.getResultsOK() || !check.query->step())
+        if (!g_ctx.dbConnector->qSelectSingleRow("SELECT `isLocked` FROM `mboard`.`threads` WHERE `threadId`=:threadId;", {{":threadId", MAKE_VAR(UINT32, threadId)}},
+                                        {&isLocked}))
         {
             return API::APIReturn(HTTP::Status::S_404_NOT_FOUND, "not_found", "Thread not found");
         }
@@ -146,7 +144,7 @@ API::APIReturn postMessage(void *, const API::RESTful::RequestParameters &params
     }
 
     // Insert message
-    if (!g_ctx.dbConnector->execute("INSERT INTO `mboard`.`messages` (threadId, userId, content, ipAddress, userAgent) "
+    if (!g_ctx.dbConnector->qExecuteEx("INSERT INTO `mboard`.`messages` (threadId, userId, content, ipAddress, userAgent) "
                                     "VALUES (:threadId, :userId, :content, :ipAddress, :userAgent);",
                                     {{":threadId", MAKE_VAR(UINT32, threadId)},
                                      {":userId", MAKE_VAR(STRING, user)},
@@ -158,7 +156,7 @@ API::APIReturn postMessage(void *, const API::RESTful::RequestParameters &params
     }
 
     // Update thread's lastPostAt
-    if (!g_ctx.dbConnector->execute("UPDATE `mboard`.`threads` SET `lastPostAt`=CURRENT_TIMESTAMP WHERE `threadId`=:threadId;", {{":threadId", MAKE_VAR(UINT32, threadId)}}))
+    if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`threads` SET `lastPostAt`=CURRENT_TIMESTAMP WHERE `threadId`=:threadId;", {{":threadId", MAKE_VAR(UINT32, threadId)}}))
     {
         return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed updating thread");
     }
@@ -189,10 +187,8 @@ API::APIReturn editMessage(void *, const API::RESTful::RequestParameters &params
     // Check if user owns the message
     Abstract::STRING messageOwner;
     {
-        SQLConnector::QueryInstance check = g_ctx.dbConnector->qSelect("SELECT `userId` FROM `mboard`.`messages` WHERE `messageId`=:messageId AND `isDeleted`=0;",
-                                                                       {{":messageId", MAKE_VAR(UINT32, messageId)}}, {&messageOwner});
-
-        if (!check.getResultsOK() || !check.query->step())
+        if (!g_ctx.dbConnector->qSelectSingleRow("SELECT `userId` FROM `mboard`.`messages` WHERE `messageId`=:messageId AND `isDeleted`=0;",
+                                        {{":messageId", MAKE_VAR(UINT32, messageId)}}, {&messageOwner}))
         {
             return API::APIReturn(HTTP::Status::S_404_NOT_FOUND, "not_found", "Message not found");
         }
@@ -203,7 +199,7 @@ API::APIReturn editMessage(void *, const API::RESTful::RequestParameters &params
         }
     }
 
-    if (!g_ctx.dbConnector->execute("UPDATE `mboard`.`messages` SET `content`=:content, `editedAt`=CURRENT_TIMESTAMP "
+    if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`messages` SET `content`=:content, `editedAt`=CURRENT_TIMESTAMP "
                                     "WHERE `messageId`=:messageId;",
                                     {{":content", MAKE_VAR(STRING, content)}, {":messageId", MAKE_VAR(UINT32, messageId)}}))
     {
@@ -230,10 +226,8 @@ API::APIReturn deleteMessage(void *, const API::RESTful::RequestParameters &para
     // Check if user owns the message
     Abstract::STRING messageOwner;
     {
-        SQLConnector::QueryInstance check = g_ctx.dbConnector->qSelect("SELECT `userId` FROM `mboard`.`messages` WHERE `messageId`=:messageId AND `isDeleted`=0;",
-                                                                       {{":messageId", MAKE_VAR(UINT32, messageId)}}, {&messageOwner});
-
-        if (!check.getResultsOK() || !check.query->step())
+        if (!g_ctx.dbConnector->qSelectSingleRow("SELECT `userId` FROM `mboard`.`messages` WHERE `messageId`=:messageId AND `isDeleted`=0;",
+                                        {{":messageId", MAKE_VAR(UINT32, messageId)}}, {&messageOwner}))
         {
             return API::APIReturn(HTTP::Status::S_404_NOT_FOUND, "not_found", "Message not found");
         }
@@ -244,7 +238,7 @@ API::APIReturn deleteMessage(void *, const API::RESTful::RequestParameters &para
         }
     }
 
-    if (!g_ctx.dbConnector->execute("UPDATE `mboard`.`messages` SET `isDeleted`=1 WHERE `messageId`=:messageId;", {{":messageId", MAKE_VAR(UINT32, messageId)}}))
+    if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`messages` SET `isDeleted`=1 WHERE `messageId`=:messageId;", {{":messageId", MAKE_VAR(UINT32, messageId)}}))
     {
         return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
@@ -267,7 +261,7 @@ API::APIReturn toggleThreadLock(void *, const API::RESTful::RequestParameters &p
 
     APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is toggling lock for thread %d", threadId);
 
-    if (!g_ctx.dbConnector->execute("UPDATE `mboard`.`threads` SET `isLocked`=:isLocked WHERE `threadId`=:threadId;",
+    if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`threads` SET `isLocked`=:isLocked WHERE `threadId`=:threadId;",
                                     {{":isLocked", MAKE_VAR(BOOL, lockStatus)}, {":threadId", MAKE_VAR(UINT32, threadId)}}))
     {
         return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
@@ -291,7 +285,7 @@ API::APIReturn toggleThreadPin(void *, const API::RESTful::RequestParameters &pa
 
     APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is toggling pin for thread %d", threadId);
 
-    if (!g_ctx.dbConnector->execute("UPDATE `mboard`.`threads` SET `isPinned`=:isPinned WHERE `threadId`=:threadId;",
+    if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`threads` SET `isPinned`=:isPinned WHERE `threadId`=:threadId;",
                                     {{":isPinned", MAKE_VAR(BOOL, pinStatus)}, {":threadId", MAKE_VAR(UINT32, threadId)}}))
     {
         return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
