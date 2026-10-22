@@ -63,9 +63,9 @@ API::APIReturn apiEcho(void *,const API::RESTful::RequestParameters &params, Ses
 
 API::APIReturn exampleFunctionRD(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
 {
-    // All Read-only operations in the database should use the Lock_RD (Read) instead the Lock_RW (Read-Write). 
+    // All Read-only operations in the database should use the std::shared_lock (Read) instead the std::unique_lock (Read-Write). 
     // Don't worry about the cursor because QueryInstance have his own timed mutex.
-    Threads::Sync::Lock_RD lock(g_ctx.dbShrLock);
+    std::shared_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
     std::string appName = JSON_ASSTRING(*params.inputJSON, "appName", "");
     Abstract::STRING roleId, description;
@@ -100,9 +100,9 @@ API::APIReturn exampleFunctionRD(void *, const API::RESTful::RequestParameters &
 
 API::APIReturn exampleFunctionRW(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
 {
-    // But when a write operation is done, Lock_RW (Read-Write) is mandatory.
+    // But when a write operation is done, std::unique_lock (Read-Write) is mandatory.
     // This is important if you use multiple execute's in the database, because you may want to avoid a "mix" of executions/reads
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
     std::string appName = JSON_ASSTRING(*params.inputJSON, "appName", "");
     uint32_t activityId = JSON_ASUINT(*params.inputJSON, "activityId", 0);

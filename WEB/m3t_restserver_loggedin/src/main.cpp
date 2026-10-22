@@ -14,8 +14,8 @@
  *
  */
 
-#include <Mantids30/Program_Logs/config_builder.h>
-#include <Mantids30/Server_RESTfulWebAPI/config_builder.h>
+#include <Mantids30/Config_Logs/config_builder.h>
+#include <Mantids30/Config_REST/config_builder.h>
 #include <Mantids30/Program_Service/program_config.h>
 
 #include <Mantids30/Net_Sockets/socket_tls.h>
@@ -53,7 +53,7 @@ struct AppContext
  * @brief Example API endpoint: GET /api/v1/helloWorld
  * Returns a greeting message with the client's IP address
  */
-API::APIReturn apiHelloWorld(void *,const API::RESTful::RequestParameters &, Sessions::ClientDetails &client)
+API::APIReturn apiHelloWorld(void *,const API::RESTful::RequestContext &, Sessions::ClientDetails &client)
 {
     Json::Value jsonResponse;
 
@@ -69,7 +69,7 @@ API::APIReturn apiHelloWorld(void *,const API::RESTful::RequestParameters &, Ses
  * @brief Example API endpoint: GET /api/v1/status
  * Returns service status information
  */
-API::APIReturn apiStatus(void *,const API::RESTful::RequestParameters &, Sessions::ClientDetails &)
+API::APIReturn apiStatus(void *,const API::RESTful::RequestContext &, Sessions::ClientDetails &)
 {
     Json::Value jsonResponse;
 
@@ -85,11 +85,11 @@ API::APIReturn apiStatus(void *,const API::RESTful::RequestParameters &, Session
  * @brief Example API endpoint: GET /api/v1/echo
  * Returns the input message back to the client
  */
-API::APIReturn apiEcho(void *,const API::RESTful::RequestParameters &params, Sessions::ClientDetails &)
+API::APIReturn apiEcho(void *,const API::RESTful::RequestContext &params, Sessions::ClientDetails &)
 {
     Json::Value jsonResponse;
 
-    jsonResponse["echo"] = JSON_ASSTRING(*params.inputJSON,"message","");
+    jsonResponse["echo"] = Helpers::JSON::ASSTRING(*params.inputJSON,"message","");
     jsonResponse["status"] = "success";
 
     return jsonResponse;
@@ -99,7 +99,7 @@ API::APIReturn apiEcho(void *,const API::RESTful::RequestParameters &params, Ses
  * @brief Example API endpoint: GET /api/v1/echo
  * Returns the input message back to the client
  */
-API::APIReturn getAuthenticatedInfo(void *,const API::RESTful::RequestParameters &params, Sessions::ClientDetails &)
+API::APIReturn getAuthenticatedInfo(void *,const API::RESTful::RequestContext &params, Sessions::ClientDetails &)
 {
     Json::Value jsonResponse;
 
@@ -109,8 +109,6 @@ API::APIReturn getAuthenticatedInfo(void *,const API::RESTful::RequestParameters
     return jsonResponse;
 }
 
-
-
 /**
  * @brief Register all API endpoints
  */
@@ -118,17 +116,17 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
 {
     auto endpoints = std::make_shared<API::RESTful::Endpoints>();
 
-    using M = API::RESTful::Endpoints;
-    using Sec = M::SecurityOptions;
+    using M = Network::Protocol::HTTP::Method;
+    using Sec = API::Security::Requirements;
 
     // Public endpoints (no authentication required)
-    endpoints->addEndpoint(M::GET,    "helloWorld",          Sec::NO_AUTH,                 {},         nullptr, &apiHelloWorld);
-    endpoints->addEndpoint(M::GET,    "status",              Sec::NO_AUTH,                 {},         nullptr, &apiStatus);
-    endpoints->addEndpoint(M::POST,   "echo",                Sec::NO_AUTH,                 {},         nullptr, &apiEcho);
-    endpoints->addEndpoint(M::GET,    "getAuthenticatedInfo",Sec::REQUIRE_JWT_COOKIE_AUTH, {"READER"}, nullptr, &getAuthenticatedInfo);
+    endpoints->addEndpoint(M::GET,    "helloWorld",          Sec::NONE,                 {},         nullptr, &apiHelloWorld);
+    endpoints->addEndpoint(M::GET,    "status",              Sec::NONE,                 {},         nullptr, &apiStatus);
+    endpoints->addEndpoint(M::POST,   "echo",                Sec::NONE,                 {},         nullptr, &apiEcho);
+    endpoints->addEndpoint(M::GET,    "getAuthenticatedInfo",Sec::JWT_COOKIE_AUTH, {"READER"}, nullptr, &getAuthenticatedInfo);
 
     // Add more endpoints here:
-    // endpoints->addEndpoint(M::POST, "users", &apiCreateUser, nullptr, Sec::FULL_AUTH, {"admin"});
+    // endpoints->addEndpoint(M::POST, "users", Sec::JWT_HEADER_AUTH, {"admin"}, nullptr, &apiCreateUser);
 
     return endpoints;
 }
@@ -146,7 +144,7 @@ bool startWebService()
     auto webConfig = g_ctx.config.get_child_optional("WebService");
     if (!webConfig.has_value())
     {
-        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Missing 'WebService' section in configuration");
+        APP_LOG->log0(__func__, Logs::ERROR, "Missing 'WebService' section in configuration");
         return false;
     }
 
@@ -154,7 +152,7 @@ bool startWebService()
 
     const char* apiKey = getenv("x-api-key");
     if (apiKey == nullptr) {
-        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Environment variable 'x-api-key' not defined");
+        APP_LOG->log0(__func__, Logs::ERROR, "Environment variable 'x-api-key' not defined");
         return false;
     }
 
@@ -162,7 +160,7 @@ bool startWebService()
 
     const char* app = getenv("app");
     if (app == nullptr) {
-        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Environment variable 'app' not defined");
+        APP_LOG->log0(__func__, Logs::ERROR, "Environment variable 'app' not defined");
         return false;
     }
 
@@ -180,7 +178,7 @@ bool startWebService()
 
     if (!engine)
     {
-        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Failed to create web service");
+        APP_LOG->log0(__func__, Logs::ERROR, "Failed to create web service");
         return false;
     }
 
@@ -194,7 +192,7 @@ bool startWebService()
     // Start service
     engine->startInBackground();
 
-    APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Web service listening on %s", engine->getListenerSocket()->getLastBindAddress().c_str());
+    APP_LOG->log0(__func__, Logs::INFO, "Web service listening on %s", engine->getListenerSockets().empty() ? "(unknown)" : engine->getListenerSockets().front()->getLastBindAddress().c_str());
     return true;
 }
 
@@ -217,7 +215,7 @@ public:
         args->setVersion(atoi(PROJECT_VER_MAJOR), atoi(PROJECT_VER_MINOR), atoi(PROJECT_VER_PATCH), "stable");
 
         // Command-line options
-        args->addCommandLineOption("Service", 'c', "config-dir", "Configuration directory path", "/etc/" PROJECT_NAME, Memory::Abstract::Var::TYPE_STRING);
+        args->addCommandLineOption("Service", 'c', "config-dir", "Configuration directory path", "/etc/" PROJECT_NAME, Memory::Abstract::Var::Type::STRING);
     }
 
     /**
@@ -236,7 +234,7 @@ public:
 
         if (!configOpt.has_value())
         {
-            initLog->log0(__func__, Logs::LEVEL_ERR, "ERROR: Failed to load configuration from %s/webserver.conf", g_ctx.configDir.c_str());
+            initLog->log0(__func__, Logs::ERROR, "ERROR: Failed to load configuration from %s/webserver.conf", g_ctx.configDir.c_str());
             return false;
         }
 
@@ -254,25 +252,25 @@ public:
      */
     int _start(int, char *[], Arguments::GlobalArguments *args) override
     {
-        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "%s v%s.%s.%s starting (PID: %d)", PROJECT_NAME, PROJECT_VER_MAJOR, PROJECT_VER_MINOR, PROJECT_VER_PATCH, getpid());
-        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
+        APP_LOG->log0(__func__, Logs::INFO, "%s v%s.%s.%s starting (PID: %d)", PROJECT_NAME, PROJECT_VER_MAJOR, PROJECT_VER_MINOR, PROJECT_VER_PATCH, getpid());
+        APP_LOG->log0(__func__, Logs::INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
 
         g_ctx.startTime = time(nullptr);
 
         if (!startWebService())
         {
-            APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Service initialization failed");
+            APP_LOG->log0(__func__, Logs::ERROR, "Service initialization failed");
             exit(EXIT_FAILURE);
         }
 
-        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Service ready");
+        APP_LOG->log0(__func__, Logs::INFO, "Service ready");
         return EXIT_SUCCESS;
     }
 
     /**
      * @brief Clean shutdown handler
      */
-    void _shutdown() override { APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Shutting down..."); }
+    void _shutdown() override { APP_LOG->log0(__func__, Logs::INFO, "Shutting down..."); }
 };
 
 // ============================================================================

@@ -18,9 +18,9 @@ bool initTables()
         if (!i || !i->isSuccessful())
         {
             if (i)
-                APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Failed to execute SQL (%s): '%s'", i->getErrorString().c_str(), std::string(sql).c_str());
+                APP_LOG->log0(__func__, Logs::CRITICAL, "Failed to execute SQL (%s): '%s'", i->getResultString().c_str(), std::string(sql).c_str());
             else
-                APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Failed to execute SQL (%s): Database was closed");
+                APP_LOG->log0(__func__, Logs::CRITICAL, "Failed to execute SQL (%s): Database was closed");
             success = false;
             break;
         }
@@ -41,22 +41,22 @@ bool initDatabase()
         {
             if (std::filesystem::create_directories(dirPath))
             {
-                APP_LOG->log0("DB", Logs::LEVEL_INFO, "Database directory created: %s", dbDirectory.c_str());
+                APP_LOG->log0("DB", Logs::INFO, "Database directory created: %s", dbDirectory.c_str());
             }
             else
             {
-                APP_LOG->log0("DB", Logs::LEVEL_ERR, "Failed to create database directory: %s", dbDirectory.c_str());
+                APP_LOG->log0("DB", Logs::ERROR, "Failed to create database directory: %s", dbDirectory.c_str());
                 return false;
             }
         }
         else
         {
-            APP_LOG->log0("DB", Logs::LEVEL_INFO, "Database directory already exists: %s", dbDirectory.c_str());
+            APP_LOG->log0("DB", Logs::INFO, "Database directory already exists: %s", dbDirectory.c_str());
         }
     }
     catch (const std::exception &e)
     {
-        APP_LOG->log0("DB", Logs::LEVEL_ERR, "Error initializing database: %s", e.what());
+        APP_LOG->log0("DB", Logs::ERROR, "Error initializing database: %s", e.what());
 
         return false;
     }
@@ -67,7 +67,7 @@ bool initDatabase()
 
     if (!g_ctx.dbConnector->connectInMemory())
     {
-        APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Error, Failed to create in-memory SQLite3 database");
+        APP_LOG->log0(__func__, Logs::CRITICAL, "Error, Failed to create in-memory SQLite3 database");
         delete g_ctx.dbConnector;
         return false;
     }
@@ -80,7 +80,7 @@ bool initDatabase()
         std::ofstream file(path);
         if (!file.is_open())
         {
-            APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Failed to create database file: '%s'", path.c_str());
+            APP_LOG->log0(__func__, Logs::CRITICAL, "Failed to create database file: '%s'", path.c_str());
             return false;
         }
         file.close();
@@ -104,13 +104,13 @@ bool initDatabase()
 
         if (!g_ctx.dbConnector->attach(messageBoardDBPath, i.first))
         {
-            APP_LOG->log0(__func__, Logs::LEVEL_CRITICAL, "Error, Failed to attach SQLite3 database file: '%s'", messageBoardDBPath.c_str());
+            APP_LOG->log0(__func__, Logs::CRITICAL, "Error, Failed to attach SQLite3 database file: '%s'", messageBoardDBPath.c_str());
             delete g_ctx.dbConnector;
             return false;
         }
         else
         {
-            APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Opened SQLite3 database file: '%s' into '%s'", messageBoardDBPath.c_str(),i.first.c_str());
+            APP_LOG->log0(__func__, Logs::INFO, "Opened SQLite3 database file: '%s' into '%s'", messageBoardDBPath.c_str(),i.first.c_str());
         }
     }
 

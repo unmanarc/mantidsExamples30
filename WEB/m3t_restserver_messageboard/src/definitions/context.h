@@ -3,8 +3,8 @@
 
 #include <Mantids30/DB_SQLite3/sqlconnector_sqlite3.h>
 #include <boost/property_tree/ptree_fwd.hpp>
-#include <Mantids30/Threads/lock_shared.h>
-#include <Mantids30/Program_Logs/config_builder.h>
+#include <shared_mutex>
+#include <Mantids30/Config_Logs/config_builder.h>
 #include <memory>
 #include <string>
 #include <ctime>
@@ -26,7 +26,7 @@ struct AppContext
     std::shared_ptr<Logs::AppLog> appLog;
     std::shared_ptr<Logs::RPCLog> rpcLog;
 
-    Mantids30::Threads::Sync::Mutex_Shared dbShrLock;
+    std::shared_mutex dbShrLock;
 
     SQLConnector_SQLite3 *dbConnector = nullptr;
 };

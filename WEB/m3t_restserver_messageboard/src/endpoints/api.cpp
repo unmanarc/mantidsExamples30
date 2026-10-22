@@ -11,19 +11,19 @@ using namespace Mantids30;
 using namespace Mantids30::Program;
 using namespace Mantids30::Memory;
 using namespace Mantids30::Network::Servers;
-using namespace Mantids30::Network::Protocols;
+using namespace Mantids30::Network::Protocol;
 
 // ============================================================================
 // MESSAGEBOARD API FUNCTIONS
 // ============================================================================
 
-API::APIReturn getThreads(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn getThreads(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RD lock(g_ctx.dbShrLock);
+    std::shared_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
     std::string user = params.jwtToken->getSubject();
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is fetching threads");
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is fetching threads");
 
     Abstract::UINT32 threadId;
     Abstract::STRING title, creatorUserId, createdAt, lastPostAt;
@@ -49,41 +49,41 @@ API::APIReturn getThreads(void *, const API::RESTful::RequestParameters &params,
     return jsonResponse;
 }
 
-API::APIReturn createThread(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn createThread(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    std::string title = JSON_ASSTRING(*params.inputJSON, "title", "");
+    std::string title = Helpers::JSON::ASSTRING(*params.inputJSON, "title", "");
     std::string user = params.jwtToken->getSubject();
 
     if (title.empty())
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Thread title is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Thread title is required");
     }
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is creating thread: %s", title.c_str());
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is creating thread: %s", title.c_str());
 
     if (!g_ctx.dbConnector->qExecuteEx("INSERT INTO `mboard`.`threads` (title, creatorUserId) VALUES (:title, :userId);", {{":title", MAKE_VAR(STRING, title)}, {":userId", MAKE_VAR(STRING, user)}}))
     {
-        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
 
     return API::APIReturn();
 }
 
-API::APIReturn getMessages(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn getMessages(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RD lock(g_ctx.dbShrLock);
+    std::shared_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    uint32_t threadId = JSON_ASUINT(*params.inputJSON, "threadId", 0);
+    uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
     std::string user = params.jwtToken->getSubject();
 
     if (threadId == 0)
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
     }
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is fetching messages for thread %d", threadId);
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is fetching messages for thread %d", threadId);
 
     Abstract::UINT32 messageId;
     Abstract::STRING userId, content, ipAddress, userAgent, createdAt, editedAt;
@@ -109,25 +109,25 @@ API::APIReturn getMessages(void *, const API::RESTful::RequestParameters &params
     return jsonResponse;
 }
 
-API::APIReturn postMessage(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn postMessage(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    uint32_t threadId = JSON_ASUINT(*params.inputJSON, "threadId", 0);
-    std::string content = JSON_ASSTRING(*params.inputJSON, "content", "");
+    uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
+    std::string content = Helpers::JSON::ASSTRING(*params.inputJSON, "content", "");
     std::string user = params.jwtToken->getSubject();
 
     if (threadId == 0)
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
     }
 
     if (content.empty())
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Message content is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Message content is required");
     }
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is posting message to thread %d", threadId);
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is posting message to thread %d", threadId);
 
     // Check if thread exists and is not locked
     Abstract::BOOL isLocked;
@@ -135,11 +135,11 @@ API::APIReturn postMessage(void *, const API::RESTful::RequestParameters &params
         if (!g_ctx.dbConnector->qSelectSingleRow("SELECT `isLocked` FROM `mboard`.`threads` WHERE `threadId`=:threadId;", {{":threadId", MAKE_VAR(UINT32, threadId)}},
                                         {&isLocked}))
         {
-            return API::APIReturn(HTTP::Status::S_404_NOT_FOUND, "not_found", "Thread not found");
+            return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_404_NOT_FOUND, "not_found", "Thread not found");
         }
         if (isLocked.getValue())
         {
-            return API::APIReturn(HTTP::Status::S_403_FORBIDDEN, "forbidden", "Thread is locked");
+            return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_403_FORBIDDEN, "forbidden", "Thread is locked");
         }
     }
 
@@ -152,37 +152,37 @@ API::APIReturn postMessage(void *, const API::RESTful::RequestParameters &params
                                      {":ipAddress", MAKE_VAR(STRING, clientDetails.ipAddress)},
                                      {":userAgent", MAKE_VAR(STRING, clientDetails.userAgent)}}))
     {
-        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
 
     // Update thread's lastPostAt
     if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`threads` SET `lastPostAt`=CURRENT_TIMESTAMP WHERE `threadId`=:threadId;", {{":threadId", MAKE_VAR(UINT32, threadId)}}))
     {
-        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed updating thread");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed updating thread");
     }
 
     return API::APIReturn();
 }
 
-API::APIReturn editMessage(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn editMessage(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    uint32_t messageId = JSON_ASUINT(*params.inputJSON, "messageId", 0);
-    std::string content = JSON_ASSTRING(*params.inputJSON, "content", "");
+    uint32_t messageId = Helpers::JSON::ASUINT(*params.inputJSON, "messageId", 0);
+    std::string content = Helpers::JSON::ASSTRING(*params.inputJSON, "content", "");
     std::string user = params.jwtToken->getSubject();
 
     if (messageId == 0)
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Message ID is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Message ID is required");
     }
 
     if (content.empty())
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Message content is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Message content is required");
     }
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is editing message %d", messageId);
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is editing message %d", messageId);
 
     // Check if user owns the message
     Abstract::STRING messageOwner;
@@ -190,12 +190,12 @@ API::APIReturn editMessage(void *, const API::RESTful::RequestParameters &params
         if (!g_ctx.dbConnector->qSelectSingleRow("SELECT `userId` FROM `mboard`.`messages` WHERE `messageId`=:messageId AND `isDeleted`=0;",
                                         {{":messageId", MAKE_VAR(UINT32, messageId)}}, {&messageOwner}))
         {
-            return API::APIReturn(HTTP::Status::S_404_NOT_FOUND, "not_found", "Message not found");
+            return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_404_NOT_FOUND, "not_found", "Message not found");
         }
 
         if (messageOwner.getValue() != user)
         {
-            return API::APIReturn(HTTP::Status::S_403_FORBIDDEN, "forbidden", "Not authorized to edit this message");
+            return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_403_FORBIDDEN, "forbidden", "Not authorized to edit this message");
         }
     }
 
@@ -203,25 +203,25 @@ API::APIReturn editMessage(void *, const API::RESTful::RequestParameters &params
                                     "WHERE `messageId`=:messageId;",
                                     {{":content", MAKE_VAR(STRING, content)}, {":messageId", MAKE_VAR(UINT32, messageId)}}))
     {
-        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
 
     return API::APIReturn();
 }
 
-API::APIReturn deleteMessage(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn deleteMessage(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    uint32_t messageId = JSON_ASUINT(*params.inputJSON, "messageId", 0);
+    uint32_t messageId = Helpers::JSON::ASUINT(*params.inputJSON, "messageId", 0);
     std::string user = params.jwtToken->getSubject();
 
     if (messageId == 0)
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Message ID is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Message ID is required");
     }
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is deleting message %d", messageId);
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is deleting message %d", messageId);
 
     // Check if user owns the message
     Abstract::STRING messageOwner;
@@ -229,66 +229,66 @@ API::APIReturn deleteMessage(void *, const API::RESTful::RequestParameters &para
         if (!g_ctx.dbConnector->qSelectSingleRow("SELECT `userId` FROM `mboard`.`messages` WHERE `messageId`=:messageId AND `isDeleted`=0;",
                                         {{":messageId", MAKE_VAR(UINT32, messageId)}}, {&messageOwner}))
         {
-            return API::APIReturn(HTTP::Status::S_404_NOT_FOUND, "not_found", "Message not found");
+            return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_404_NOT_FOUND, "not_found", "Message not found");
         }
 
         if (messageOwner.getValue() != user && !params.jwtToken->isAdmin())
         {
-            return API::APIReturn(HTTP::Status::S_403_FORBIDDEN, "forbidden", "Not authorized to delete this message");
+            return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_403_FORBIDDEN, "forbidden", "Not authorized to delete this message");
         }
     }
 
     if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`messages` SET `isDeleted`=1 WHERE `messageId`=:messageId;", {{":messageId", MAKE_VAR(UINT32, messageId)}}))
     {
-        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
 
     return API::APIReturn();
 }
 
-API::APIReturn toggleThreadLock(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn toggleThreadLock(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    uint32_t threadId = JSON_ASUINT(*params.inputJSON, "threadId", 0);
-    bool lockStatus = JSON_ASBOOL(*params.inputJSON, "isLocked", false);
+    uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
+    bool lockStatus = Helpers::JSON::ASBOOL(*params.inputJSON, "isLocked", false);
     std::string user = params.jwtToken->getSubject();
 
     if (threadId == 0)
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
     }
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is toggling lock for thread %d", threadId);
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is toggling lock for thread %d", threadId);
 
     if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`threads` SET `isLocked`=:isLocked WHERE `threadId`=:threadId;",
                                     {{":isLocked", MAKE_VAR(BOOL, lockStatus)}, {":threadId", MAKE_VAR(UINT32, threadId)}}))
     {
-        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
 
     return API::APIReturn();
 }
 
-API::APIReturn toggleThreadPin(void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &clientDetails)
+API::APIReturn toggleThreadPin(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
 {
-    Threads::Sync::Lock_RW lock(g_ctx.dbShrLock);
+    std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    uint32_t threadId = JSON_ASUINT(*params.inputJSON, "threadId", 0);
-    bool pinStatus = JSON_ASBOOL(*params.inputJSON, "isPinned", false);
+    uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
+    bool pinStatus = Helpers::JSON::ASBOOL(*params.inputJSON, "isPinned", false);
     std::string user = params.jwtToken->getSubject();
 
     if (threadId == 0)
     {
-        return API::APIReturn(HTTP::Status::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_400_BAD_REQUEST, "invalid_request", "Thread ID is required");
     }
 
-    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::LEVEL_INFO, "User is toggling pin for thread %d", threadId);
+    APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is toggling pin for thread %d", threadId);
 
     if (!g_ctx.dbConnector->qExecuteEx("UPDATE `mboard`.`threads` SET `isPinned`=:isPinned WHERE `threadId`=:threadId;",
                                     {{":isPinned", MAKE_VAR(BOOL, pinStatus)}, {":threadId", MAKE_VAR(UINT32, threadId)}}))
     {
-        return API::APIReturn(HTTP::Status::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
+        return API::APIReturn(Network::Protocol::HTTP::Status::Code::S_500_INTERNAL_SERVER_ERROR, "internal_error", "DB Failed");
     }
 
     return API::APIReturn();
@@ -302,18 +302,18 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
 {
     auto endpoints = std::make_shared<API::RESTful::Endpoints>();
 
-    using M = API::RESTful::Endpoints;
-    using Sec = M::SecurityOptions;
+    using M = Network::Protocol::HTTP::Method;
+    using Sec = API::Security::Requirements;
 
     // Messageboard endpoints
-    endpoints->addEndpoint(M::GET, "threads", Sec::REQUIRE_JWT_COOKIE_AUTH, {"READER"}, nullptr, &getThreads);
-    endpoints->addEndpoint(M::POST, "threads", Sec::REQUIRE_JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &createThread);
-    endpoints->addEndpoint(M::GET, "messages", Sec::REQUIRE_JWT_COOKIE_AUTH, {"READER"}, nullptr, &getMessages);
-    endpoints->addEndpoint(M::POST, "messages", Sec::REQUIRE_JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &postMessage);
-    endpoints->addEndpoint(M::PUT, "messages", Sec::REQUIRE_JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &editMessage);
-    endpoints->addEndpoint(M::DELETE, "messages", Sec::REQUIRE_JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &deleteMessage);
-    endpoints->addEndpoint(M::PUT, "threads/lock", Sec::REQUIRE_JWT_COOKIE_AUTH, {"EDITOR"}, nullptr, &toggleThreadLock);
-    endpoints->addEndpoint(M::PUT, "threads/pin", Sec::REQUIRE_JWT_COOKIE_AUTH, {"EDITOR"}, nullptr, &toggleThreadPin);
+    endpoints->addEndpoint(M::GET, "threads", Sec::JWT_COOKIE_AUTH, {"READER"}, nullptr, &getThreads);
+    endpoints->addEndpoint(M::POST, "threads", Sec::JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &createThread);
+    endpoints->addEndpoint(M::GET, "messages", Sec::JWT_COOKIE_AUTH, {"READER"}, nullptr, &getMessages);
+    endpoints->addEndpoint(M::POST, "messages", Sec::JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &postMessage);
+    endpoints->addEndpoint(M::PUT, "messages", Sec::JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &editMessage);
+    endpoints->addEndpoint(M::DELETE, "messages", Sec::JWT_COOKIE_AUTH, {"WRITER"}, nullptr, &deleteMessage);
+    endpoints->addEndpoint(M::PUT, "threads/lock", Sec::JWT_COOKIE_AUTH, {"EDITOR"}, nullptr, &toggleThreadLock);
+    endpoints->addEndpoint(M::PUT, "threads/pin", Sec::JWT_COOKIE_AUTH, {"EDITOR"}, nullptr, &toggleThreadPin);
 
     return endpoints;
 }

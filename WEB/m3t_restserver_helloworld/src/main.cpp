@@ -15,8 +15,8 @@
  */
 
 #include <Mantids30/Program_Service/program_config.h>
-#include <Mantids30/Program_Logs/config_builder.h>
-#include <Mantids30/Server_RESTfulWebAPI/config_builder.h>
+#include <Mantids30/Config_Logs/config_builder.h>
+#include <Mantids30/Config_REST/config_builder.h>
 #include <Mantids30/Net_Sockets/socket_tls.h>
 #include <Mantids30/Program_Service/application.h>
 #include <Mantids30/Server_RESTfulWebAPI/engine.h>
@@ -51,13 +51,13 @@ struct AppContext
 auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
 {
     auto endpoints = std::make_shared<API::RESTful::Endpoints>();
-    using M = API::RESTful::Endpoints;
-    using Sec = M::SecurityOptions;
+    using M = Network::Protocol::HTTP::Method;
+    using Sec = API::Security::Requirements;
 
     // Public endpoint: GET /api/v1/helloWorld
     // Returns a greeting message with the client's IP address.
-    endpoints->addEndpoint(M::GET, "helloWorld", Sec::NO_AUTH, {}, nullptr,
-                           [](void *, const API::RESTful::RequestParameters &, Sessions::ClientDetails &client) -> API::APIReturn
+    endpoints->addEndpoint(M::GET, "helloWorld", Sec::NONE, {}, nullptr,
+                           [](void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &client) -> API::APIReturn
                            {
                                Json::Value jsonResponse;
                                jsonResponse["message"] = "Hello World";
@@ -69,8 +69,8 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
 
     // Public endpoint: GET /api/v1/status
     // Returns service status information.
-    endpoints->addEndpoint(M::GET, "status", Sec::NO_AUTH, {}, nullptr,
-                           [](void *, const API::RESTful::RequestParameters &, Sessions::ClientDetails &) -> API::APIReturn
+    endpoints->addEndpoint(M::GET, "status", Sec::NONE, {}, nullptr,
+                           [](void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &) -> API::APIReturn
                            {
                                Json::Value jsonResponse;
                                jsonResponse["service"] = PROJECT_NAME;
@@ -82,17 +82,17 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
 
     // Public endpoint: POST /api/v1/echo
     // Returns the input message back to the client.
-    endpoints->addEndpoint(M::POST, "echo", Sec::NO_AUTH, {}, nullptr,
-                           [](void *, const API::RESTful::RequestParameters &params, Sessions::ClientDetails &) -> API::APIReturn
+    endpoints->addEndpoint(M::POST, "echo", Sec::NONE, {}, nullptr,
+                           [](void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &) -> API::APIReturn
                            {
                                Json::Value jsonResponse;
-                               jsonResponse["echo"] = JSON_ASSTRING(*params.inputJSON, "message", "");
+                               jsonResponse["echo"] = Helpers::JSON::ASSTRING(*params.inputJSON, "message", "");
                                jsonResponse["status"] = "success";
                                return jsonResponse;
                            });
 
     // Add more endpoints here:
-    // endpoints->addEndpoint(M::POST, "users", &apiCreateUser, nullptr, Sec::FULL_AUTH, {"admin"});
+    // endpoints->addEndpoint(M::POST, "users", Sec::JWT_HEADER_AUTH, {"admin"}, nullptr, &apiCreateUser);
 
     return endpoints;
 }
@@ -110,7 +110,7 @@ bool startWebService()
     auto webConfig = g_ctx.config.get_child_optional("WebService");
     if (!webConfig.has_value())
     {
-        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Missing 'WebService' section in configuration");
+        APP_LOG->log0(__func__, Logs::ERROR, "Missing 'WebService' section in configuration");
         return false;
     }
 
@@ -122,7 +122,7 @@ bool startWebService()
 
     if (!engine)
     {
-        APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Failed to create web service");
+        APP_LOG->log0(__func__, Logs::ERROR, "Failed to create web service");
         return false;
     }
 
@@ -136,7 +136,7 @@ bool startWebService()
     // Start service
     engine->startInBackground();
 
-    APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Web service listening on %s", engine->getListenerSocket()->getLastBindAddress().c_str());
+    APP_LOG->log0(__func__, Logs::INFO, "Web service listening on %s", engine->getListenerSockets().empty() ? "(unknown)" : engine->getListenerSockets().front()->getLastBindAddress().c_str());
     return true;
 }
 
@@ -159,7 +159,7 @@ public:
         args->setVersion(atoi(PROJECT_VER_MAJOR), atoi(PROJECT_VER_MINOR), atoi(PROJECT_VER_PATCH), "stable");
 
         // Command-line options
-        args->addCommandLineOption("Service", 'c', "config-dir", "Configuration directory path", "/etc/" PROJECT_NAME, Memory::Abstract::Var::TYPE_STRING);
+        args->addCommandLineOption("Service", 'c', "config-dir", "Configuration directory path", "/etc/" PROJECT_NAME, Memory::Abstract::Var::Type::STRING);
     }
 
     /**
@@ -178,7 +178,7 @@ public:
 
         if (!configOpt.has_value())
         {
-            initLog->log0(__func__, Logs::LEVEL_ERR, "ERROR: Failed to load configuration from %s/webserver.conf", g_ctx.configDir.c_str());
+            initLog->log0(__func__, Logs::ERROR, "ERROR: Failed to load configuration from %s/webserver.conf", g_ctx.configDir.c_str());
             return false;
         }
 
@@ -196,25 +196,25 @@ public:
      */
     int _start(int, char *[], Arguments::GlobalArguments *args) override
     {
-        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "%s v%s.%s.%s starting (PID: %d)", PROJECT_NAME, PROJECT_VER_MAJOR, PROJECT_VER_MINOR, PROJECT_VER_PATCH, getpid());
-        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
+        APP_LOG->log0(__func__, Logs::INFO, "%s v%s.%s.%s starting (PID: %d)", PROJECT_NAME, PROJECT_VER_MAJOR, PROJECT_VER_MINOR, PROJECT_VER_PATCH, getpid());
+        APP_LOG->log0(__func__, Logs::INFO, "Configuration Directory: %s", g_ctx.configDir.c_str());
 
         g_ctx.startTime = time(nullptr);
 
         if (!startWebService())
         {
-            APP_LOG->log0(__func__, Logs::LEVEL_ERR, "Service initialization failed");
+            APP_LOG->log0(__func__, Logs::ERROR, "Service initialization failed");
             exit(EXIT_FAILURE);
         }
 
-        APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Service ready");
+        APP_LOG->log0(__func__, Logs::INFO, "Service ready");
         return EXIT_SUCCESS;
     }
 
     /**
      * @brief Clean shutdown handler
      */
-    void _shutdown() override { APP_LOG->log0(__func__, Logs::LEVEL_INFO, "Shutting down..."); }
+    void _shutdown() override { APP_LOG->log0(__func__, Logs::INFO, "Shutting down..."); }
 };
 
 // ============================================================================
