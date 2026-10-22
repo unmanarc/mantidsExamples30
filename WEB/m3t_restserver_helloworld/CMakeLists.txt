@@ -78,11 +78,16 @@ set(Mantids30_LIBRARIES
     Mantids30_Memory
     Mantids30_Program_Service
     Mantids30_Program_Logs
+    Mantids30_Config_Logs
+    Mantids30_Config_REST
+    Mantids30_Config_JWT
+    Mantids30_Scripts_MantidsLang
+    Mantids30_Scripts_JSONExprEval
     Mantids30_Helpers
     Mantids30_DataFormat_JWT
 )
 
-set(ENV{PKG_CONFIG_PATH} "/home/coding/Devel/ROOT/share/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+set(ENV{PKG_CONFIG_PATH} "/home/user/Devel/ROOT/share/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 
 # Iterate over the list of Mantids30 libraries and add include directories and linker flags to the target
 foreach(LIBRARY ${Mantids30_LIBRARIES})
