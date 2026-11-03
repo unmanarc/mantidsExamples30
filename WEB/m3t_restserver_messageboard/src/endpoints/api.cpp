@@ -3,7 +3,7 @@
 #include "Mantids30/Protocol_HTTP/api_return.h"
 
 #include "../definitions/context.h"
-#include <json/value.h>
+#include <boost/json.hpp>
 
 #include <Mantids30/Memory/a_allvars.h>
 
@@ -33,10 +33,10 @@ API::APIReturn getThreads(void *, const API::RESTful::RequestContext &params, Se
                                                                "FROM `mboard`.`threads` WHERE `isLocked`=0 OR `isLocked`=1 ORDER BY `isPinned` DESC, `lastPostAt` DESC;",
                                                                {}, {&threadId, &title, &creatorUserId, &createdAt, &lastPostAt, &isPinned, &isLocked});
 
-    Json::Value jsonResponse = Json::arrayValue;
+    boost::json::array jsonResponse;
     while (i && i->isSuccessful() && i->step())
     {
-        Json::Value x;
+        boost::json::object x;
         x["threadId"] = threadId.getValue();
         x["title"] = title.getValue();
         x["creatorUserId"] = creatorUserId.getValue();
@@ -44,9 +44,9 @@ API::APIReturn getThreads(void *, const API::RESTful::RequestContext &params, Se
         x["lastPostAt"] = lastPostAt.getValue();
         x["isPinned"] = isPinned.getValue();
         x["isLocked"] = isLocked.getValue();
-        jsonResponse.append(x);
+        jsonResponse.emplace_back(std::move(x));
     }
-    return jsonResponse;
+    return API::APIReturn(jsonResponse);
 }
 
 API::APIReturn createThread(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)
@@ -93,10 +93,10 @@ API::APIReturn getMessages(void *, const API::RESTful::RequestContext &params, S
                                                                "FROM `mboard`.`messages` WHERE `threadId`=:threadId AND `isDeleted`=0 ORDER BY `createdAt` ASC;",
                                                                {{":threadId", MAKE_VAR(UINT32, threadId)}}, {&messageId, &userId, &content, &ipAddress, &userAgent, &createdAt, &editedAt, &isDeleted});
 
-    Json::Value jsonResponse = Json::arrayValue;
+    boost::json::array jsonResponse;
     while (i && i->isSuccessful() && i->step())
     {
-        Json::Value x;
+        boost::json::object x;
         x["messageId"] = messageId.getValue();
         x["userId"] = userId.getValue();
         x["content"] = content.getValue();
@@ -104,9 +104,9 @@ API::APIReturn getMessages(void *, const API::RESTful::RequestContext &params, S
         x["userAgent"] = userAgent.getValue();
         x["createdAt"] = createdAt.getValue();
         x["editedAt"] = editedAt.getValue();
-        jsonResponse.append(x);
+        jsonResponse.emplace_back(std::move(x));
     }
-    return jsonResponse;
+    return API::APIReturn(jsonResponse);
 }
 
 API::APIReturn postMessage(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &clientDetails)

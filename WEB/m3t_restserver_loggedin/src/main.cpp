@@ -25,6 +25,7 @@
 #include "config.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/json.hpp>
 
 using namespace Mantids30;
 using namespace Mantids30::Program;
@@ -55,14 +56,14 @@ struct AppContext
  */
 API::APIReturn apiHelloWorld(void *,const API::RESTful::RequestContext &, Sessions::ClientDetails &client)
 {
-    Json::Value jsonResponse;
+    boost::json::object jsonResponse;
 
     jsonResponse["message"] = "Hello World";
     jsonResponse["client_ip"] = client.ipAddress;
-    jsonResponse["timestamp"] = static_cast<Json::Int64>(std::time(nullptr));
+    jsonResponse["timestamp"] = static_cast<int64_t>(std::time(nullptr));
     jsonResponse["status"] = "success";
 
-    return jsonResponse;
+    return API::APIReturn(jsonResponse);
 }
 
 /**
@@ -71,14 +72,14 @@ API::APIReturn apiHelloWorld(void *,const API::RESTful::RequestContext &, Sessio
  */
 API::APIReturn apiStatus(void *,const API::RESTful::RequestContext &, Sessions::ClientDetails &)
 {
-    Json::Value jsonResponse;
+    boost::json::object jsonResponse;
 
     jsonResponse["service"] = PROJECT_NAME;
     jsonResponse["version"] = std::string(PROJECT_VER_MAJOR) + "." + PROJECT_VER_MINOR + "." + PROJECT_VER_PATCH;
-    jsonResponse["uptime_seconds"] = static_cast<Json::Int64>( std::time(nullptr) - g_ctx.startTime );
+    jsonResponse["uptime_seconds"] = static_cast<int64_t>( std::time(nullptr) - g_ctx.startTime );
     jsonResponse["status"] = "running";
 
-    return jsonResponse;
+    return API::APIReturn(jsonResponse);
 }
 
 /**
@@ -87,12 +88,12 @@ API::APIReturn apiStatus(void *,const API::RESTful::RequestContext &, Sessions::
  */
 API::APIReturn apiEcho(void *,const API::RESTful::RequestContext &params, Sessions::ClientDetails &)
 {
-    Json::Value jsonResponse;
+    boost::json::object jsonResponse;
 
     jsonResponse["echo"] = Helpers::JSON::ASSTRING(*params.inputJSON,"message","");
     jsonResponse["status"] = "success";
 
-    return jsonResponse;
+    return API::APIReturn(jsonResponse);
 }
 
 /**
@@ -101,12 +102,12 @@ API::APIReturn apiEcho(void *,const API::RESTful::RequestContext &params, Sessio
  */
 API::APIReturn getAuthenticatedInfo(void *,const API::RESTful::RequestContext &params, Sessions::ClientDetails &)
 {
-    Json::Value jsonResponse;
+    boost::json::object jsonResponse;
 
     jsonResponse["info"] = params.jwtToken->getAllClaimsAsJSON();
     jsonResponse["status"] = "success";
 
-    return jsonResponse;
+    return API::APIReturn(jsonResponse);
 }
 
 /**

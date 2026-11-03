@@ -24,6 +24,7 @@
 #include "config.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/json.hpp>
 #include <optional>
 
 using namespace Mantids30;
@@ -59,12 +60,12 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
     endpoints->addEndpoint(M::GET, "helloWorld", Sec::NONE, {}, nullptr,
                            [](void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &client) -> API::APIReturn
                            {
-                               Json::Value jsonResponse;
+                               boost::json::object jsonResponse;
                                jsonResponse["message"] = "Hello World";
                                jsonResponse["client_ip"] = client.ipAddress;
-                               jsonResponse["timestamp"] = static_cast<Json::Int64>(std::time(nullptr));
+                               jsonResponse["timestamp"] = static_cast<int64_t>(std::time(nullptr));
                                jsonResponse["status"] = "success";
-                               return jsonResponse;
+                               return API::APIReturn(jsonResponse);
                            });
 
     // Public endpoint: GET /api/v1/status
@@ -72,12 +73,12 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
     endpoints->addEndpoint(M::GET, "status", Sec::NONE, {}, nullptr,
                            [](void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &) -> API::APIReturn
                            {
-                               Json::Value jsonResponse;
+                               boost::json::object jsonResponse;
                                jsonResponse["service"] = PROJECT_NAME;
                                jsonResponse["version"] = std::string(PROJECT_VER_MAJOR) + "." + PROJECT_VER_MINOR + "." + PROJECT_VER_PATCH;
-                               jsonResponse["uptime_seconds"] = static_cast<Json::Int64>(std::time(nullptr) - g_ctx.startTime);
+                               jsonResponse["uptime_seconds"] = static_cast<int64_t>(std::time(nullptr) - g_ctx.startTime);
                                jsonResponse["status"] = "running";
-                               return jsonResponse;
+                               return API::APIReturn(jsonResponse);
                            });
 
     // Public endpoint: POST /api/v1/echo
@@ -85,10 +86,10 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
     endpoints->addEndpoint(M::POST, "echo", Sec::NONE, {}, nullptr,
                            [](void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &) -> API::APIReturn
                            {
-                               Json::Value jsonResponse;
+                               boost::json::object jsonResponse;
                                jsonResponse["echo"] = Helpers::JSON::ASSTRING(*params.inputJSON, "message", "");
                                jsonResponse["status"] = "success";
-                               return jsonResponse;
+                               return API::APIReturn(jsonResponse);
                            });
 
     // Add more endpoints here:

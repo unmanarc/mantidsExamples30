@@ -39,15 +39,8 @@ find_package(PkgConfig REQUIRED)
 ################################################################################
 
 ################################################################################
-# Find jsoncpp
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-include_directories(${JSONCPP_INCLUDE_DIRS})
-link_directories(${JSONCPP_LIBRARY_DIRS})
-target_link_libraries(${APP_NAME} ${JSONCPP_LIBRARIES})
-
-################################################################################
 # Boost Packages:
-find_package(Boost REQUIRED COMPONENTS regex thread)
+find_package(Boost REQUIRED COMPONENTS regex thread json)
 include_directories(${Boost_INCLUDE_DIRS})
 target_link_libraries(${APP_NAME} ${Boost_LIBRARIES})
 
@@ -61,7 +54,7 @@ else()
 endif()
 target_include_directories(${APP_NAME} PUBLIC ${OPENSSL_INCLUDE_DIRS})
 target_compile_options(${APP_NAME} PUBLIC ${OPENSSL_CFLAGS_OTHER})
-target_link_libraries(${APP_NAME} ${OPENSSL_STATIC_LDFLAGS})
+target_link_libraries(${APP_NAME} ${OPENSSL_LIBRARIES})
 
 ################################################################################
 # List of Mantids30 libraries to link against
@@ -85,6 +78,7 @@ set(Mantids30_LIBRARIES
     Mantids30_Scripts_MantidsLang
     Mantids30_Scripts_JSONExprEval
     Mantids30_Helpers
+    Mantids30_DataFormat_JSON
     Mantids30_DataFormat_JWT
 )
 

@@ -1,16 +1,14 @@
 #pragma once
 
-#include "json/value.h"
-#include <Mantids30/Helpers/json.h>
+#include <Mantids30/DataFormat_JSON/json.h>
+#include <boost/json.hpp>
 
 static auto parse = [](const char *json)
 {
-    Json::Value r;
-    Json::Reader().parse(json, r);
-    return r;
+    return boost::json::parse(json);
 };
 
-Json::Value appScopes()
+boost::json::value appScopes()
 {
     return parse(R"(
     [
@@ -30,7 +28,7 @@ Json::Value appScopes()
     )");
 }
 
-Json::Value appRoles()
+boost::json::value appRoles()
 {
     return parse(R"(
     [
@@ -55,7 +53,7 @@ Json::Value appRoles()
     )");
 }
 
-Json::Value appActivities()
+boost::json::value appActivities()
 {
     return parse(R"(
     [
