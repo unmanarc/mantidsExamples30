@@ -21,7 +21,7 @@ API::APIReturn getThreads(void *, const API::RESTful::RequestContext &params, Se
 {
     std::shared_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    std::string user = params.jwtToken->getSubject();
+    std::string user(params.jwtToken->getSubject());
 
     APP_LOG->log2(__func__, user, clientDetails.ipAddress, Logs::INFO, "User is fetching threads");
 
@@ -53,8 +53,8 @@ API::APIReturn createThread(void *, const API::RESTful::RequestContext &params, 
 {
     std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
-    std::string title = Helpers::JSON::ASSTRING(*params.inputJSON, "title", "");
-    std::string user = params.jwtToken->getSubject();
+    std::string title(Helpers::JSON::ASSTRING(*params.inputJSON, "title", ""));
+    std::string user(params.jwtToken->getSubject());
 
     if (title.empty())
     {
@@ -76,7 +76,7 @@ API::APIReturn getMessages(void *, const API::RESTful::RequestContext &params, S
     std::shared_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
     uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
-    std::string user = params.jwtToken->getSubject();
+    std::string user(params.jwtToken->getSubject());
 
     if (threadId == 0)
     {
@@ -114,8 +114,8 @@ API::APIReturn postMessage(void *, const API::RESTful::RequestContext &params, S
     std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
     uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
-    std::string content = Helpers::JSON::ASSTRING(*params.inputJSON, "content", "");
-    std::string user = params.jwtToken->getSubject();
+    std::string content(Helpers::JSON::ASSTRING(*params.inputJSON, "content", ""));
+    std::string user(params.jwtToken->getSubject());
 
     if (threadId == 0)
     {
@@ -169,8 +169,8 @@ API::APIReturn editMessage(void *, const API::RESTful::RequestContext &params, S
     std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
     uint32_t messageId = Helpers::JSON::ASUINT(*params.inputJSON, "messageId", 0);
-    std::string content = Helpers::JSON::ASSTRING(*params.inputJSON, "content", "");
-    std::string user = params.jwtToken->getSubject();
+    std::string content(Helpers::JSON::ASSTRING(*params.inputJSON, "content", ""));
+    std::string user(params.jwtToken->getSubject());
 
     if (messageId == 0)
     {
@@ -214,7 +214,7 @@ API::APIReturn deleteMessage(void *, const API::RESTful::RequestContext &params,
     std::unique_lock<std::shared_mutex> lock(g_ctx.dbShrLock);
 
     uint32_t messageId = Helpers::JSON::ASUINT(*params.inputJSON, "messageId", 0);
-    std::string user = params.jwtToken->getSubject();
+    std::string user(params.jwtToken->getSubject());
 
     if (messageId == 0)
     {
@@ -252,7 +252,7 @@ API::APIReturn toggleThreadLock(void *, const API::RESTful::RequestContext &para
 
     uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
     bool lockStatus = Helpers::JSON::ASBOOL(*params.inputJSON, "isLocked", false);
-    std::string user = params.jwtToken->getSubject();
+    std::string user(params.jwtToken->getSubject());
 
     if (threadId == 0)
     {
@@ -276,7 +276,7 @@ API::APIReturn toggleThreadPin(void *, const API::RESTful::RequestContext &param
 
     uint32_t threadId = Helpers::JSON::ASUINT(*params.inputJSON, "threadId", 0);
     bool pinStatus = Helpers::JSON::ASBOOL(*params.inputJSON, "isPinned", false);
-    std::string user = params.jwtToken->getSubject();
+    std::string user(params.jwtToken->getSubject());
 
     if (threadId == 0)
     {

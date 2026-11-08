@@ -46,8 +46,52 @@ struct AppContext
     std::shared_ptr<Logs::RPCLog> rpcLog;
 } g_ctx;
 
+// ============================================================================
+// API ENDPOINTS
+// ============================================================================
+
 /**
- * @brief Register all API endpoints using lambda functions.
+ * @brief Example API endpoint: GET /api/v1/helloWorld
+ * Returns a greeting message with the client's IP address.
+ */
+API::APIReturn apiHelloWorld(void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &client)
+{
+    boost::json::object jsonResponse;
+    jsonResponse["message"] = "Hello World";
+    jsonResponse["client_ip"] = client.ipAddress;
+    jsonResponse["timestamp"] = static_cast<int64_t>(std::time(nullptr));
+    jsonResponse["status"] = "success";
+    return API::APIReturn(jsonResponse);
+}
+
+/**
+ * @brief Example API endpoint: GET /api/v1/status
+ * Returns service status information.
+ */
+API::APIReturn apiStatus(void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &)
+{
+    boost::json::object jsonResponse;
+    jsonResponse["service"] = PROJECT_NAME;
+    jsonResponse["version"] = std::string(PROJECT_VER_MAJOR) + "." + PROJECT_VER_MINOR + "." + PROJECT_VER_PATCH;
+    jsonResponse["uptime_seconds"] = static_cast<int64_t>(std::time(nullptr) - g_ctx.startTime);
+    jsonResponse["status"] = "running";
+    return API::APIReturn(jsonResponse);
+}
+
+/**
+ * @brief Example API endpoint: POST /api/v1/echo
+ * Returns the input message back to the client.
+ */
+API::APIReturn apiEcho(void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &)
+{
+    boost::json::object jsonResponse;
+    jsonResponse["echo"] = Helpers::JSON::ASSTRING(*params.inputJSON, "message", "");
+    jsonResponse["status"] = "success";
+    return API::APIReturn(jsonResponse);
+}
+
+/**
+ * @brief Register all API endpoints.
  */
 auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
 {
@@ -56,41 +100,13 @@ auto registerAPIEndpoints() -> std::shared_ptr<API::RESTful::Endpoints>
     using Sec = API::Security::Requirements;
 
     // Public endpoint: GET /api/v1/helloWorld
-    // Returns a greeting message with the client's IP address.
-    endpoints->addEndpoint(M::GET, "helloWorld", Sec::NONE, {}, nullptr,
-                           [](void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &client) -> API::APIReturn
-                           {
-                               boost::json::object jsonResponse;
-                               jsonResponse["message"] = "Hello World";
-                               jsonResponse["client_ip"] = client.ipAddress;
-                               jsonResponse["timestamp"] = static_cast<int64_t>(std::time(nullptr));
-                               jsonResponse["status"] = "success";
-                               return API::APIReturn(jsonResponse);
-                           });
+    endpoints->addEndpoint(M::GET, "helloWorld", Sec::NONE, {}, nullptr, &apiHelloWorld);
 
     // Public endpoint: GET /api/v1/status
-    // Returns service status information.
-    endpoints->addEndpoint(M::GET, "status", Sec::NONE, {}, nullptr,
-                           [](void *, const API::RESTful::RequestContext &, Sessions::ClientDetails &) -> API::APIReturn
-                           {
-                               boost::json::object jsonResponse;
-                               jsonResponse["service"] = PROJECT_NAME;
-                               jsonResponse["version"] = std::string(PROJECT_VER_MAJOR) + "." + PROJECT_VER_MINOR + "." + PROJECT_VER_PATCH;
-                               jsonResponse["uptime_seconds"] = static_cast<int64_t>(std::time(nullptr) - g_ctx.startTime);
-                               jsonResponse["status"] = "running";
-                               return API::APIReturn(jsonResponse);
-                           });
+    endpoints->addEndpoint(M::GET, "status", Sec::NONE, {}, nullptr, &apiStatus);
 
     // Public endpoint: POST /api/v1/echo
-    // Returns the input message back to the client.
-    endpoints->addEndpoint(M::POST, "echo", Sec::NONE, {}, nullptr,
-                           [](void *, const API::RESTful::RequestContext &params, Sessions::ClientDetails &) -> API::APIReturn
-                           {
-                               boost::json::object jsonResponse;
-                               jsonResponse["echo"] = Helpers::JSON::ASSTRING(*params.inputJSON, "message", "");
-                               jsonResponse["status"] = "success";
-                               return API::APIReturn(jsonResponse);
-                           });
+    endpoints->addEndpoint(M::POST, "echo", Sec::NONE, {}, nullptr, &apiEcho);
 
     // Add more endpoints here:
     // endpoints->addEndpoint(M::POST, "users", Sec::JWT_HEADER_AUTH, {"admin"}, nullptr, &apiCreateUser);
